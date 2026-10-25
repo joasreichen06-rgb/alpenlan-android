@@ -319,7 +319,7 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
         Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             AlpenlanLogo()
             Spacer(Modifier.width(10.dp))
-            Mono("Nextcloud Kontakte", color = A.blue)
+            Mono("Alpenlan Cloud", color = A.blue)
             Spacer(Modifier.weight(1f))
             SyncIcon(s.syncing) { vm.sync() }
             IconButton(onClick = { vm.showSettings(true) }) { Icon(Icons.Default.Settings, contentDescription = "Einstellungen", tint = A.muted) }

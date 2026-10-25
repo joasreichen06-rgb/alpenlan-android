@@ -116,7 +116,7 @@ private fun Header(s: UiState, vm: AppViewModel) {
             if (isCal) {
                 ModeSwitch(s.mode) { vm.setMode(it) }
             } else {
-                Mono("Nextcloud Tasks", color = A.blue)
+                Mono("Alpenlan Cloud", color = A.blue)
             }
             Spacer(Modifier.weight(1f))
             if (isCal) {
