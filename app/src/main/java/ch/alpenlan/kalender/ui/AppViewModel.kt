@@ -192,6 +192,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 sheet = refreshSheet(it.sheet, result.events),
             )
         }
+        if (result.calPerm) ch.alpenlan.kalender.reminders.ReminderEngine.reschedule(app)
     }
 
     private fun refreshSheet(sheet: Sheet?, events: List<EventItem>): Sheet? = when (sheet) {

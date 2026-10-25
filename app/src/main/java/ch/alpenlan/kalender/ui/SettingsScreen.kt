@@ -2,7 +2,20 @@
 
 package ch.alpenlan.kalender.ui
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import ch.alpenlan.kalender.reminders.ReminderEngine
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +62,10 @@ fun SettingsScreen(s: UiState, vm: AppViewModel) {
     BackHandler { vm.setScreen(Screen.MAIN) }
     val ctx = LocalContext.current
     val st = s.settings
+    var notifTick by remember { mutableIntStateOf(0) }
+    var askedNotif by remember { mutableStateOf(false) }
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifTick++; ReminderEngine.reschedule(ctx) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { notifTick++; onPauseOrDispose { } }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { vm.setScreen(Screen.MAIN) }) {
@@ -109,9 +126,26 @@ fun SettingsScreen(s: UiState, vm: AppViewModel) {
 
             Section("Benachrichtigungen") {
                 SwitchRow(
-                    "Termin-Erinnerungen anzeigen", st.notifications, { v -> vm.updateSettings { it.copy(notifications = v) } },
+                    "Termin-Erinnerungen anzeigen", st.notifications, { v -> vm.updateSettings { it.copy(notifications = v) }; ReminderEngine.reschedule(ctx) },
                     subtitle = "Ausschalten, falls eine andere Kalender-App schon erinnert (sonst doppelt).",
                 )
+                val canNotify = remember(notifTick) { ReminderEngine.canNotify(ctx) }
+                val canExact = remember(notifTick) { ReminderEngine.canExact(ctx) }
+                if (!canNotify) {
+                    Text("Benachrichtigungen sind für Alpenlan blockiert.", color = A.warn, fontSize = 13.sp)
+                    LinkButton("Benachrichtigungen erlauben", primary = true) {
+                        if (Build.VERSION.SDK_INT >= 33 && !askedNotif) { askedNotif = true; notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                        else ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+                if (!canExact) {
+                    Text("Exakte Wecker sind nicht erlaubt – Erinnerungen können sich verspäten.", color = A.warn, fontSize = 13.sp)
+                    LinkButton("Wecker erlauben") {
+                        runCatching { ctx.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                }
+                LinkButton("Test-Benachrichtigung senden") { ReminderEngine.test(ctx); notifTick++ }
+                Hint("Tipp: Bei Samsung unter Einstellungen → Apps → Alpenlan Kalender → Akku „Nicht eingeschränkt“ wählen, sonst können Erinnerungen ausbleiben.")
                 Hint("Aufgaben-Erinnerungen zeigt deine Aufgaben-App (${s.provider?.label ?: "Tasks.org/OpenTasks"}) an.")
             }
 
