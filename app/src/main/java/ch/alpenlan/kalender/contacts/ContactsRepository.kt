@@ -48,7 +48,9 @@ data class AddressBook(val name: String, val type: String, val count: Int = 0) {
             val t = type.lowercase()
             val n = name.lowercase()
             return when {
-                t.contains("davdroid") || t.contains("bitfire") -> BookKind.NEXTCLOUD
+                // Nur echte DAVx⁵-Adressbücher – das DAVx⁵-Hauptkonto synchronisiert keine Kontakte.
+                (t.contains("davdroid") || t.contains("bitfire")) && t.contains("address") -> BookKind.NEXTCLOUD
+                t.contains("davdroid") || t.contains("bitfire") -> BookKind.OTHER
                 t.isEmpty() || t.contains("contact.phone") || t.contains("localphone") || t == "com.android.contacts" ||
                     t.contains("contact.sim") || t.endsWith(".sim") || t.endsWith(".sim2") -> BookKind.DEVICE
                 APP_HINTS.any { t.contains(it) || n.contains(it) } -> BookKind.APP
@@ -441,6 +443,14 @@ class ContactsRepository(private val ctx: Context) {
         return null
     }
 
+    /** Prüft, ob ein Kontakt wirklich einen Rohkontakt im Ziel-Adressbuch hat. */
+    fun isIn(contactId: Long, book: AddressBook): Boolean {
+        cr.query(RawContacts.CONTENT_URI, arrayOf(RawContacts._ID),
+            "${RawContacts.CONTACT_ID}=? AND ${RawContacts.ACCOUNT_NAME}=? AND ${RawContacts.ACCOUNT_TYPE}=? AND ${RawContacts.DELETED}=0",
+            arrayOf(contactId.toString(), book.name, book.type), null)?.use { return it.count > 0 }
+        return false
+    }
+
     /** Neuer Kontakt im gewählten Adressbuch. Gibt die Kontakt-ID zurück. */
     fun create(d: ContactDraft): Long? {
         if (!canWrite()) return null
@@ -474,10 +484,13 @@ class ContactsRepository(private val ctx: Context) {
     fun moveTo(contactId: Long, target: AddressBook): Long? {
         if (!canWrite()) return null
         val det = detail(contactId) ?: return null
+        if (!target.isNextcloud) return null
         if (det.allRaw.any { it.second.same(target) }) return contactId
         val photo = if (det.hasPhoto) photoBytes(contactId) else null
         val draft = det.draft.copy(book = target, groups = emptySet(), newPhoto = photo)
         val newId = create(draft) ?: return null
+        // Quelle erst löschen, wenn die Kopie sicher im Nextcloud-Adressbuch liegt
+        if (!isIn(newId, target)) return null
         det.allRaw.filter { it.second.kind == BookKind.DEVICE || it.second.kind == BookKind.OTHER }.forEach { (raw, _) ->
             runCatching { cr.delete(ContentUris.withAppendedId(RawContacts.CONTENT_URI, raw), null, null) }
         }
