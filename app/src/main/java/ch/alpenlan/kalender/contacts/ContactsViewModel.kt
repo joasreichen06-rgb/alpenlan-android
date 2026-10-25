@@ -3,6 +3,7 @@ package ch.alpenlan.kalender.contacts
 import android.app.Application
 import android.content.Context
 import android.database.ContentObserver
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
@@ -31,8 +32,10 @@ data class ContactsPrefs(
 sealed interface CScreen {
     data object Home : CScreen
     data class Detail(val id: Long) : CScreen
-    data class Edit(val contactId: Long?, val rawId: Long?, val draft: ContactDraft) : CScreen
+    data class Edit(val contactId: Long?, val rawId: Long?, val draft: ContactDraft, val hasPhoto: Boolean = false) : CScreen
 }
+
+data class MoveProgress(val done: Int, val total: Int, val failed: Int = 0)
 
 data class ContactsState(
     val loaded: Boolean = false,
@@ -44,15 +47,22 @@ data class ContactsState(
     val query: String = "",
     val screen: CScreen = CScreen.Home,
     val detail: ContactDetail? = null,
+    val editGroups: List<ContactGroup> = emptyList(),
     val pendingDeletes: Set<Long> = emptySet(),
     val syncing: Boolean = false,
+    val moving: MoveProgress? = null,
     val toast: CToast? = null,
     val showSettings: Boolean = false,
     val today: LocalDate = LocalDate.now(),
+    val photoStamp: Long = 0,
 ) {
     val nextcloudBooks get() = books.filter { it.isNextcloud }
+    /** Adressbücher, in die man sinnvoll speichern kann: Nextcloud zuerst, dann das Telefon. */
+    val targetBooks get() = books.filter { it.kind == BookKind.NEXTCLOUD || (it.kind == BookKind.DEVICE && !it.type.contains("sim")) }
+    /** Quellen für die Übernahme nach Nextcloud. */
+    val sourceBooks get() = books.filter { (it.kind == BookKind.DEVICE || it.kind == BookKind.OTHER) && it.count > 0 }
     val defaultBook: AddressBook?
-        get() = books.firstOrNull { "${it.type}/${it.name}" == prefs.defaultBook } ?: nextcloudBooks.firstOrNull() ?: books.firstOrNull()
+        get() = targetBooks.firstOrNull { it.key == prefs.defaultBook } ?: nextcloudBooks.firstOrNull() ?: targetBooks.firstOrNull()
     val visible: List<ContactSummary>
         get() = contacts.filter { it.id !in pendingDeletes && (!prefs.onlyNextcloud || it.synced) }
 }
@@ -72,6 +82,7 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
+            if (_s.value.moving != null) return
             reloadJob?.cancel()
             reloadJob = viewModelScope.launch { delay(400); load() }
         }
@@ -108,8 +119,7 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
             Triple(runCatching { repo.summaries() }.getOrDefault(emptyList()), runCatching { repo.addressBooks() }.getOrDefault(emptyList()), repo.canRead())
         }
         val detailId = (_s.value.screen as? CScreen.Detail)?.id
-        val detail = if (detailId != null) withContext(Dispatchers.IO) { repo.detail(detailId) } else null
-        photos.evictAll(); noPhoto.clear()
+        val detail = if (detailId != null) withContext(Dispatchers.IO) { runCatching { repo.detail(detailId) }.getOrNull() } else null
         _s.update {
             it.copy(
                 loaded = true, contacts = r.first, books = r.second, permission = r.third,
@@ -120,14 +130,17 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun clearPhotos() { photos.evictAll(); noPhoto.clear(); _s.update { it.copy(photoStamp = System.nanoTime()) } }
+
     fun setQuery(q: String) = _s.update { it.copy(query = q) }
     fun showSettings(v: Boolean) = _s.update { it.copy(showSettings = v) }
     fun dismissToast() = _s.update { it.copy(toast = null) }
+    private fun toast(t: String, undo: Long? = null) = _s.update { it.copy(toast = CToast(t, undo)) }
 
     fun open(id: Long) {
         _s.update { it.copy(screen = CScreen.Detail(id), detail = null) }
         viewModelScope.launch {
-            val d = withContext(Dispatchers.IO) { repo.detail(id) }
+            val d = withContext(Dispatchers.IO) { runCatching { repo.detail(id) }.getOrNull() }
             _s.update { it.copy(detail = d) }
         }
     }
@@ -142,17 +155,39 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun newContact(prefill: ContactDraft = ContactDraft()) =
-        _s.update { it.copy(screen = CScreen.Edit(null, null, prefill.copy(book = prefill.book ?: it.defaultBook))) }
-
-    fun edit(d: ContactDetail) = _s.update {
-        it.copy(screen = CScreen.Edit(d.id, d.rawId, ContactDraft(
-            given = d.given, family = d.family, company = d.company, jobTitle = d.jobTitle,
-            phones = d.phones.ifEmpty { listOf(Labeled("", android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)) },
-            emails = d.emails.ifEmpty { listOf(Labeled("", android.provider.ContactsContract.CommonDataKinds.Email.TYPE_HOME)) },
-            addresses = d.addresses, website = d.websites.firstOrNull() ?: "", birthday = d.birthday, note = d.note, book = d.book,
-        )))
+    fun loadGroups(book: AddressBook?) {
+        viewModelScope.launch {
+            val g = withContext(Dispatchers.IO) { repo.groups(book) }
+            _s.update { it.copy(editGroups = g) }
+        }
     }
+
+    fun newContact() {
+        val book = _s.value.defaultBook
+        _s.update { it.copy(screen = CScreen.Edit(null, null, ContactDraft(book = book)), editGroups = emptyList()) }
+        loadGroups(book)
+    }
+
+    fun edit(d: ContactDetail) {
+        val draft = d.draft.let {
+            it.copy(
+                phones = it.phones.ifEmpty { listOf(Labeled("", android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)) },
+                emails = it.emails.ifEmpty { listOf(Labeled("", android.provider.ContactsContract.CommonDataKinds.Email.TYPE_HOME)) },
+            )
+        }
+        _s.update { it.copy(screen = CScreen.Edit(d.id, d.rawId, draft, d.hasPhoto), editGroups = emptyList()) }
+        loadGroups(d.book)
+    }
+
+    fun createGroup(book: AddressBook?, title: String, onCreated: (Long) -> Unit) {
+        if (book == null || title.isBlank()) return
+        viewModelScope.launch {
+            val id = withContext(Dispatchers.IO) { runCatching { repo.createGroup(book, title.trim()) }.getOrNull() }
+            if (id != null) { loadGroups(book); onCreated(id) }
+        }
+    }
+
+    suspend fun preparePhoto(uri: Uri): ByteArray? = withContext(Dispatchers.IO) { repo.preparePhoto(uri) }
 
     fun save(e: CScreen.Edit) {
         viewModelScope.launch {
@@ -162,10 +197,12 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
                 }.getOrNull()
             }
             if (id == null) {
-                _s.update { it.copy(toast = CToast("Speichern fehlgeschlagen – Berechtigung prüfen")) }
+                toast("Speichern fehlgeschlagen – Berechtigung prüfen")
                 return@launch
             }
-            _s.update { it.copy(screen = CScreen.Detail(id), toast = CToast(if (e.rawId != null) "Kontakt gespeichert" else "Kontakt erstellt")) }
+            if (e.draft.newPhoto != null) clearPhotos()
+            _s.update { it.copy(screen = CScreen.Detail(id)) }
+            toast(if (e.rawId != null) "Kontakt gespeichert" else "Kontakt erstellt")
             load()
             repo.requestSync(_s.value.books)
         }
@@ -180,7 +217,8 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun delete(d: ContactDetail) {
-        _s.update { it.copy(pendingDeletes = it.pendingDeletes + d.id, screen = CScreen.Home, detail = null, toast = CToast("${d.displayName} gelöscht", d.id)) }
+        _s.update { it.copy(pendingDeletes = it.pendingDeletes + d.id, screen = CScreen.Home, detail = null) }
+        toast("${d.displayName} gelöscht", d.id)
         deleteJobs[d.id] = viewModelScope.launch {
             delay(5000)
             withContext(Dispatchers.IO) { runCatching { repo.delete(d.id, d.lookupKey) } }
@@ -196,12 +234,45 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
         _s.update { it.copy(pendingDeletes = it.pendingDeletes - id, toast = null) }
     }
 
+    /** Einen Kontakt in die Nextcloud verschieben. */
+    fun moveOne(d: ContactDetail) {
+        val target = _s.value.defaultBook?.takeIf { it.isNextcloud } ?: _s.value.nextcloudBooks.firstOrNull() ?: run {
+            toast("Kein Nextcloud-Adressbuch gefunden"); return
+        }
+        viewModelScope.launch {
+            val newId = withContext(Dispatchers.IO) { runCatching { repo.moveTo(d.id, target) }.getOrNull() }
+            if (newId == null) { toast("Verschieben fehlgeschlagen"); return@launch }
+            clearPhotos()
+            _s.update { it.copy(screen = CScreen.Detail(newId)) }
+            toast("In Nextcloud verschoben")
+            load()
+            repo.requestSync(listOf(target))
+        }
+    }
+
+    /** Alle Kontakte aus den gewählten Gerät-/Google-Adressbüchern in die Nextcloud übernehmen. */
+    fun moveAll(sources: Set<String>, target: AddressBook) {
+        val ids = _s.value.contacts.filter { c -> !c.synced && c.books.any { it.key in sources } }.map { it.id }
+        if (ids.isEmpty()) { toast("Keine Kontakte zum Übernehmen"); return }
+        viewModelScope.launch {
+            _s.update { it.copy(moving = MoveProgress(0, ids.size), showSettings = false) }
+            var failed = 0
+            ids.forEachIndexed { i, id ->
+                val ok = withContext(Dispatchers.IO) { runCatching { repo.moveTo(id, target) }.getOrNull() } != null
+                if (!ok) failed++
+                _s.update { it.copy(moving = MoveProgress(i + 1, ids.size, failed)) }
+            }
+            _s.update { it.copy(moving = null) }
+            clearPhotos()
+            toast(if (failed == 0) "${ids.size} Kontakte in Nextcloud übernommen" else "${ids.size - failed} übernommen, $failed fehlgeschlagen")
+            load()
+            repo.requestSync(listOf(target))
+        }
+    }
+
     fun sync() {
         val books = _s.value.nextcloudBooks
-        if (books.isEmpty()) {
-            _s.update { it.copy(toast = CToast("Kein Nextcloud-Adressbuch in DAVx⁵ gefunden")) }
-            return
-        }
+        if (books.isEmpty()) { toast("Kein Nextcloud-Adressbuch in DAVx⁵ gefunden"); return }
         repo.requestSync(books)
         viewModelScope.launch {
             _s.update { it.copy(syncing = true) }

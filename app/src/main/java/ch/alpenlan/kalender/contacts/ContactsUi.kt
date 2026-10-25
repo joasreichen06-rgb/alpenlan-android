@@ -6,8 +6,13 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.ContactsContract.CommonDataKinds.Email
+import android.provider.ContactsContract.CommonDataKinds.Event
+import android.provider.ContactsContract.CommonDataKinds.Phone
+import android.provider.ContactsContract.CommonDataKinds.Relation
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -26,6 +31,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -53,6 +59,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -64,12 +71,15 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DisplayMode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -89,7 +99,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -172,20 +185,14 @@ private fun map(ctx: Context, a: String) = open(ctx, "geo:0,0?q=${Uri.encode(a)}
 private fun web(ctx: Context, u: String) = open(ctx, if (u.startsWith("http")) u else "https://$u")
 
 @Composable
-private fun Avatar(vm: ContactsViewModel, id: Long, name: String, hasPhoto: Boolean, size: Dp, highRes: Boolean = false) {
-    val photo by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, id, hasPhoto, highRes) {
-        value = if (hasPhoto || highRes) vm.photo(id, highRes) else null
+private fun Avatar(vm: ContactsViewModel, id: Long, name: String, hasPhoto: Boolean, size: Dp, stamp: Long, highRes: Boolean = false) {
+    val photo by produceState<ImageBitmap?>(null, id, hasPhoto, highRes, stamp) {
+        value = if (hasPhoto) vm.photo(id, highRes) else null
     }
-    Box(
-        Modifier.size(size).clip(CircleShape).background(avatarColor(name)),
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(Modifier.size(size).clip(CircleShape).background(avatarColor(name)), contentAlignment = Alignment.Center) {
         val p = photo
-        if (p != null) {
-            Image(p, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else {
-            Text(initials(name), color = Color.White, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.38f).sp)
-        }
+        if (p != null) Image(p, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        else Text(initials(name), color = Color.White, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.38f).sp)
     }
 }
 
@@ -204,9 +211,7 @@ private fun SyncIcon(syncing: Boolean, onClick: () -> Unit) {
 @Composable
 fun ContactsApp(vm: ContactsViewModel) {
     val s by vm.state.collectAsStateWithLifecycle()
-    Box(
-        Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(A.groundTop, A.groundBottom)))
-    ) {
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(A.groundTop, A.groundBottom)))) {
         if (!s.loaded) return@Box
         if (!s.permission) {
             PermissionScreen(vm)
@@ -219,16 +224,30 @@ fun ContactsApp(vm: ContactsViewModel) {
         }
         ToastBar(s, vm, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 88.dp, bottom = 20.dp))
         if (s.showSettings) SettingsSheet(s, vm)
+        s.moving?.let { MovingDialog(it) }
     }
+}
+
+@Composable
+private fun MovingDialog(p: MoveProgress) {
+    AlertDialog(
+        onDismissRequest = {},
+        containerColor = A.panel,
+        title = { Text("Übernehme in Nextcloud …") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LinearProgressIndicator(progress = { if (p.total == 0) 0f else p.done / p.total.toFloat() }, modifier = Modifier.fillMaxWidth(), color = A.blue, trackColor = A.line2)
+                Text("${p.done} von ${p.total}" + if (p.failed > 0) " · ${p.failed} Fehler" else "", color = A.fg2)
+            }
+        },
+        confirmButton = {},
+    )
 }
 
 @Composable
 private fun PermissionScreen(vm: ContactsViewModel) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { vm.refresh() }
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(24.dp), verticalArrangement = Arrangement.Center) {
         AlpenlanLogo(Modifier.size(40.dp, 22.dp))
         Spacer(Modifier.height(12.dp))
         Text(buildAnnotatedString { append("KONTAK"); withStyle(SpanStyle(color = A.blue)) { append("TE.") } }, fontFamily = Syne, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, color = A.fg)
@@ -269,7 +288,6 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
     val scope = rememberCoroutineScope()
     val searching = s.query.isNotBlank()
     val sortName = { c: ContactSummary -> if (s.prefs.sortByFamily) c.nameAlt else c.name }
-    val shownName = sortName
     val filtered = remember(s.visible, s.query, s.prefs.sortByFamily) {
         s.visible.filter { matches(it, s.query) }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { sortName(it) })
     }
@@ -279,6 +297,7 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
             .filter { ChronoUnit.DAYS.between(s.today, it.third) <= 30 }
             .sortedBy { it.third }.take(6)
     }
+    val movable = remember(s.contacts) { s.contacts.count { it.movable } }
     val entries = remember(filtered) {
         val out = mutableListOf<Entry>()
         var last = ""
@@ -289,10 +308,10 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
         }
         out
     }
-    val lead = if (searching) 0 else (if (favorites.isNotEmpty()) 1 else 0) + (if (birthdays.isNotEmpty()) 1 else 0) + (if (s.nextcloudBooks.isEmpty()) 1 else 0)
-    val letterIndex = remember(entries, lead) {
-        entries.mapIndexedNotNull { i, e -> (e as? Entry.Header)?.let { it.letter to i + lead } }.toMap()
-    }
+    val showHint = s.nextcloudBooks.isEmpty()
+    val showMove = !showHint && movable > 0
+    val lead = if (searching) 0 else listOf(showHint, showMove, favorites.isNotEmpty(), birthdays.isNotEmpty()).count { it }
+    val letterIndex = remember(entries, lead) { entries.mapIndexedNotNull { i, e -> (e as? Entry.Header)?.let { it.letter to i + lead } }.toMap() }
 
     BackHandler(enabled = searching) { vm.setQuery("") }
 
@@ -314,21 +333,19 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
         }
         OutlinedTextField(
             value = s.query, onValueChange = { vm.setQuery(it) },
-            placeholder = { Text("Name, Nummer, E-Mail, Firma", color = A.dim) },
+            placeholder = { Text("Suchen", color = A.dim) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = A.muted) },
             trailingIcon = { if (searching) IconButton(onClick = { vm.setQuery("") }) { Icon(Icons.Default.Clear, contentDescription = "Suche leeren", tint = A.muted) } },
             singleLine = true, shape = RoundedCornerShape(14.dp), colors = fieldColors(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(
-                state = listState, modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 30.dp, bottom = 110.dp),
-            ) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 30.dp, bottom = 110.dp)) {
                 if (!searching) {
-                    if (s.nextcloudBooks.isEmpty()) item(key = "hint") { NoBookHint(ctx) }
-                    if (favorites.isNotEmpty()) item(key = "fav") { Favorites(vm, favorites) }
-                    if (birthdays.isNotEmpty()) item(key = "bday") { Birthdays(vm, s.today, birthdays) }
+                    if (showHint) item(key = "hint") { NoBookHint(ctx) }
+                    if (showMove) item(key = "move") { MoveBanner(movable) { vm.showSettings(true) } }
+                    if (favorites.isNotEmpty()) item(key = "fav") { Favorites(s, vm, favorites) }
+                    if (birthdays.isNotEmpty()) item(key = "bday") { Birthdays(s, vm, birthdays) }
                 }
                 if (filtered.isEmpty()) item(key = "empty") {
                     Text(if (searching) "Nichts gefunden" else "Noch keine Kontakte", color = A.muted, fontSize = 14.sp, modifier = Modifier.padding(top = 30.dp))
@@ -340,7 +357,7 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
                                 Mono(e.letter, color = A.blue, size = 12)
                             }
                         }
-                        is Entry.Item -> item(key = e.c.id) { ContactRow(vm, e.c, shownName(e.c)) }
+                        is Entry.Item -> item(key = e.c.id) { ContactRow(s, vm, e.c, sortName(e.c)) }
                     }
                 }
             }
@@ -373,17 +390,29 @@ private fun NoBookHint(ctx: Context) {
 }
 
 @Composable
-private fun Favorites(vm: ContactsViewModel, favs: List<ContactSummary>) {
+private fun MoveBanner(count: Int, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp).clip(RoundedCornerShape(14.dp)).background(A.blue.copy(alpha = 0.10f))
+            .border(1.dp, Color(0xFF2B4466), RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("$count Kontakte nur auf dem Gerät", color = A.fg, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Hint("In die Nextcloud übernehmen, damit sie überall verfügbar sind.")
+        }
+        Text("Übernehmen", color = A.blueLight, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun Favorites(s: ContactsState, vm: ContactsViewModel, favs: List<ContactSummary>) {
     Column(Modifier.padding(top = 6.dp, bottom = 6.dp)) {
         Mono("Favoriten", color = A.blue)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             favs.forEach { c ->
-                Column(
-                    Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable { vm.open(c.id) }.padding(vertical = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Avatar(vm, c.id, c.name, c.hasPhoto, 52.dp)
+                Column(Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable { vm.open(c.id) }.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Avatar(vm, c.id, c.name, c.hasPhoto, 52.dp, s.photoStamp)
                     Spacer(Modifier.height(4.dp))
                     Text(c.name.split(' ').first(), color = A.fg2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -393,7 +422,7 @@ private fun Favorites(vm: ContactsViewModel, favs: List<ContactSummary>) {
 }
 
 @Composable
-private fun Birthdays(vm: ContactsViewModel, today: LocalDate, list: List<Triple<ContactSummary, Birthday, LocalDate>>) {
+private fun Birthdays(s: ContactsState, vm: ContactsViewModel, list: List<Triple<ContactSummary, Birthday, LocalDate>>) {
     Column(
         Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(16.dp)).background(A.panel.copy(alpha = 0.92f))
             .border(1.dp, A.line, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
@@ -401,13 +430,10 @@ private fun Birthdays(vm: ContactsViewModel, today: LocalDate, list: List<Triple
         Mono("Geburtstage · 30 Tage", color = A.blue)
         Spacer(Modifier.height(4.dp))
         list.forEach { (c, b, next) ->
-            val days = ChronoUnit.DAYS.between(today, next)
+            val days = ChronoUnit.DAYS.between(s.today, next)
             val whenText = when (days) { 0L -> "Heute"; 1L -> "Morgen"; else -> "${Dates.wdShort(next)}, ${Dates.short(next)}" }
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp)).clickable { vm.open(c.id) },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Avatar(vm, c.id, c.name, c.hasPhoto, 34.dp)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp)).clickable { vm.open(c.id) }, verticalAlignment = Alignment.CenterVertically) {
+                Avatar(vm, c.id, c.name, c.hasPhoto, 34.dp, s.photoStamp)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(c.name, color = A.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -420,12 +446,12 @@ private fun Birthdays(vm: ContactsViewModel, today: LocalDate, list: List<Triple
 }
 
 @Composable
-private fun ContactRow(vm: ContactsViewModel, c: ContactSummary, name: String) {
+private fun ContactRow(s: ContactsState, vm: ContactsViewModel, c: ContactSummary, name: String) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 60.dp).clip(RoundedCornerShape(12.dp)).clickable { vm.open(c.id) }.padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(vm, c.id, c.name, c.hasPhoto, 42.dp)
+        Avatar(vm, c.id, c.name, c.hasPhoto, 42.dp, s.photoStamp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(name, color = A.fg, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -448,16 +474,13 @@ private fun AlphabetBar(letters: List<String>, modifier: Modifier, onLetter: (St
             .width(24.dp)
             .onSizeChanged { height = it.height.coerceAtLeast(1) }
             .pointerInput(letters) {
-                fun pick(y: Float) {
-                    val i = (y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)
-                    onLetter(letters[i])
+                detectTapGestures { pos ->
+                    onLetter(letters[(pos.y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)])
                 }
-                detectTapGestures { pick(it.y) }
             }
             .pointerInput(letters) {
                 detectVerticalDragGestures { change, _ ->
-                    val i = (change.position.y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)
-                    onLetter(letters[i])
+                    onLetter(letters[(change.position.y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)])
                 }
             },
         verticalArrangement = Arrangement.SpaceEvenly,
@@ -467,49 +490,59 @@ private fun AlphabetBar(letters: List<String>, modifier: Modifier, onLetter: (St
     }
 }
 
-
 // ------------------------------------------------------------------ Detail
 
 @Composable
 private fun DetailScreen(s: ContactsState, vm: ContactsViewModel) {
     BackHandler { vm.back() }
     val ctx = LocalContext.current
-    val d = s.detail
+    val det = s.detail
     var confirmDelete by remember { mutableStateOf(false) }
+    LaunchedEffect(det?.book) { det?.book?.let { vm.loadGroups(it) } }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück", tint = A.fg) }
             Spacer(Modifier.weight(1f))
-            if (d != null) {
-                IconButton(onClick = { vm.toggleStar(d) }) {
-                    Icon(Icons.Default.Star, contentDescription = if (d.starred) "Aus Favoriten entfernen" else "Zu Favoriten", tint = if (d.starred) A.warn else A.dim)
+            if (det != null) {
+                IconButton(onClick = { vm.toggleStar(det) }) {
+                    Icon(Icons.Default.Star, contentDescription = if (det.starred) "Aus Favoriten entfernen" else "Zu Favoriten", tint = if (det.starred) A.warn else A.dim)
                 }
-                IconButton(onClick = { vm.edit(d) }) { Icon(Icons.Default.Edit, contentDescription = "Bearbeiten", tint = A.fg) }
+                if (det.rawId != null && det.book?.kind != BookKind.APP) {
+                    IconButton(onClick = { vm.edit(det) }) { Icon(Icons.Default.Edit, contentDescription = "Bearbeiten", tint = A.fg) }
+                }
             }
         }
-        if (d == null) return@Column
+        if (det == null) return@Column
+        val d = det.draft
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Avatar(vm, d.id, d.displayName, true, 104.dp, highRes = true)
+                Avatar(vm, det.id, det.displayName, det.hasPhoto, 104.dp, s.photoStamp, highRes = true)
                 Spacer(Modifier.height(12.dp))
-                Text(d.displayName, color = A.fg, fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                val org = listOf(d.jobTitle, d.company).filter { it.isNotBlank() }.joinToString(" · ")
+                Text(det.displayName, color = A.fg, fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                if (d.nickname.isNotBlank()) Text("„${d.nickname}“", color = A.fg2, fontSize = 14.sp)
+                val org = listOf(d.jobTitle, d.department, d.company).filter { it.isNotBlank() }.joinToString(" · ")
                 if (org.isNotBlank()) Text(org, color = A.muted, fontSize = 14.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(6.dp))
-                Mono(d.book?.let { if (it.isNextcloud) "Nextcloud · ${it.name}" else "Nur auf dem Gerät" } ?: "", size = 10, spacing = 1.0,
-                    color = if (d.book?.isNextcloud == true) A.blue else A.warn)
+                val b = det.book
+                Mono(
+                    when (b?.kind) { BookKind.NEXTCLOUD -> "Nextcloud · ${b?.label}"; BookKind.DEVICE -> "Nur auf dem Gerät"; null -> ""; else -> b?.label ?: "" },
+                    size = 10, spacing = 1.0, color = if (b?.isNextcloud == true) A.blue else A.warn,
+                )
+            }
+            if (det.book?.isNextcloud != true && s.nextcloudBooks.isNotEmpty()) {
+                LinkButton("In Nextcloud verschieben", Modifier.fillMaxWidth(), primary = true) { vm.moveOne(det) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 val phone = d.phones.firstOrNull()?.value
                 val email = d.emails.firstOrNull()?.value
-                val addr = d.addresses.firstOrNull()?.value
+                val addr = d.addresses.firstOrNull()?.display()
                 QuickAction(Icons.Default.Call, "Anrufen", phone != null) { phone?.let { dial(ctx, it) } }
                 QuickAction(Icons.Default.Send, "SMS", phone != null) { phone?.let { sms(ctx, it) } }
                 QuickAction(Icons.Default.Email, "E-Mail", email != null) { email?.let { mail(ctx, it) } }
-                QuickAction(Icons.Default.Place, "Karte", addr != null) { addr?.let { map(ctx, it) } }
+                QuickAction(Icons.Default.Place, "Karte", addr != null) { addr?.let { map(ctx, it.replace("\n", ", ")) } }
             }
             if (d.phones.isNotEmpty()) Card("Telefon") {
                 d.phones.forEach { p ->
@@ -519,21 +552,27 @@ private fun DetailScreen(s: ContactsState, vm: ContactsViewModel) {
                 }
             }
             if (d.emails.isNotEmpty()) Card("E-Mail") { d.emails.forEach { e -> InfoRow(e.value, Types.emailLabel(e), onClick = { mail(ctx, e.value) }) } }
-            if (d.addresses.isNotEmpty()) Card("Adresse") { d.addresses.forEach { a -> InfoRow(a.value, Types.postalLabel(a), onClick = { map(ctx, a.value) }) } }
-            d.birthday?.let { b ->
-                val next = b.nextOccurrence(s.today)
-                val days = ChronoUnit.DAYS.between(s.today, next)
-                val date = "${b.day}. ${Dates.MONTHS[b.month - 1]}" + (b.year?.let { " $it" } ?: "")
-                val sub = buildString {
-                    b.ageOn(s.today.let { t -> if (next == t) t else next.minusYears(1) })?.let { append("$it Jahre") }
-                    if (isNotEmpty()) append(" · ")
-                    append(when (days) { 0L -> "heute Geburtstag"; 1L -> "morgen"; else -> "in $days Tagen" })
+            if (d.addresses.isNotEmpty()) Card("Adresse") { d.addresses.forEach { a -> InfoRow(a.display(), Types.postalLabel(a), onClick = { map(ctx, a.display().replace("\n", ", ")) }) } }
+            if (d.events.isNotEmpty()) Card("Wichtige Daten") {
+                d.events.forEach { e ->
+                    val next = e.date.nextOccurrence(s.today)
+                    val days = ChronoUnit.DAYS.between(s.today, next)
+                    val sub = buildString {
+                        append(Types.eventLabel(e))
+                        e.date.ageOn(if (next == s.today) next else next.minusYears(1))?.let { append(" · $it Jahre") }
+                        append(" · ").append(when (days) { 0L -> "heute"; 1L -> "morgen"; else -> "in $days Tagen" })
+                    }
+                    InfoRow(e.date.text(Dates.MONTHS), sub)
                 }
-                Card("Geburtstag") { InfoRow(date, sub) }
             }
+            if (d.relations.isNotEmpty()) Card("Beziehungen") { d.relations.forEach { r -> InfoRow(r.value, Types.relationLabel(r)) } }
+            val groupNames = s.editGroups.filter { it.id in d.groups }.map { it.title }
+            if (groupNames.isNotEmpty()) Card("Gruppen") { Text(groupNames.joinToString(", "), color = A.fg, fontSize = 15.sp, modifier = Modifier.padding(vertical = 8.dp)) }
             if (d.websites.isNotEmpty()) Card("Website") { d.websites.forEach { w -> InfoRow(w, "Web", onClick = { web(ctx, w) }) } }
             if (d.note.isNotBlank()) Card("Notiz") { Text(d.note, color = A.fg2, fontSize = 14.sp, modifier = Modifier.padding(vertical = 6.dp)) }
-
+            if (det.allRaw.size > 1) {
+                Hint("Verknüpft mit: " + det.allRaw.map { it.second.label }.distinct().joinToString(", "))
+            }
             Row(
                 Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x1AE02204))
                     .border(1.dp, Color(0xFF6B2A20), RoundedCornerShape(12.dp)).clickable(role = Role.Button) { confirmDelete = true },
@@ -546,13 +585,13 @@ private fun DetailScreen(s: ContactsState, vm: ContactsViewModel) {
             Spacer(Modifier.height(24.dp))
         }
     }
-    if (confirmDelete && d != null) {
-        androidx.compose.material3.AlertDialog(
+    if (confirmDelete && det != null) {
+        AlertDialog(
             onDismissRequest = { confirmDelete = false },
             containerColor = A.panel,
-            title = { Text("${d.displayName} löschen?") },
-            text = { Text("Der Kontakt wird auch in der Nextcloud gelöscht.", color = A.fg2) },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; vm.delete(d) }) { Text("Löschen", color = A.redSoft) } },
+            title = { Text("${det.displayName} löschen?") },
+            text = { Text(if (det.book?.isNextcloud == true) "Der Kontakt wird auch in der Nextcloud gelöscht." else "Der Kontakt wird vom Gerät gelöscht.", color = A.fg2) },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; vm.delete(det) }) { Text("Löschen", color = A.redSoft) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
         )
     }
@@ -565,8 +604,7 @@ private fun QuickAction(icon: androidx.compose.ui.graphics.vector.ImageVector, l
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            Modifier.size(48.dp).clip(CircleShape).background(if (enabled) A.blue.copy(alpha = 0.16f) else A.panel2)
-                .border(1.dp, if (enabled) A.blue else A.line, CircleShape),
+            Modifier.size(48.dp).clip(CircleShape).background(if (enabled) A.blue.copy(alpha = 0.16f) else A.panel2).border(1.dp, if (enabled) A.blue else A.line, CircleShape),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, contentDescription = null, tint = if (enabled) A.blueLight else A.dim, modifier = Modifier.size(22.dp)) }
         Spacer(Modifier.height(4.dp))
@@ -575,7 +613,7 @@ private fun QuickAction(icon: androidx.compose.ui.graphics.vector.ImageVector, l
 }
 
 @Composable
-private fun Card(title: String, content: @Composable () -> Unit) {
+private fun Card(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(A.panel.copy(alpha = 0.92f))
             .border(1.dp, A.line, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
@@ -588,8 +626,7 @@ private fun Card(title: String, content: @Composable () -> Unit) {
 @Composable
 private fun InfoRow(value: String, label: String, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(10.dp))
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(10.dp)).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
@@ -606,16 +643,22 @@ private fun InfoRow(value: String, label: String, onClick: (() -> Unit)? = null,
 private fun EditorScreen(s: ContactsState, vm: ContactsViewModel, e: CScreen.Edit) {
     var d by remember(e) { mutableStateOf(e.draft) }
     var err by remember(e) { mutableStateOf<String?>(null) }
-    var pickBirthday by remember { mutableStateOf(false) }
+    var moreName by remember(e) { mutableStateOf(listOf(e.draft.prefix, e.draft.middle, e.draft.suffix, e.draft.phoneticGiven, e.draft.phoneticFamily).any { it.isNotBlank() }) }
+    var pickDateFor by remember { mutableStateOf<Int?>(null) }
+    var newGroup by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch { vm.preparePhoto(uri)?.let { d = d.copy(newPhoto = it) } }
+    }
     BackHandler { vm.back() }
+
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { vm.back() }) { Text("Abbrechen", color = A.muted, fontWeight = FontWeight.SemiBold) }
             Text(if (e.rawId == null) "Neuer Kontakt" else "Bearbeiten", color = A.fg, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
             Box(
                 Modifier.height(40.dp).clip(RoundedCornerShape(10.dp)).background(A.blue).clickable(role = Role.Button) {
-                    if (d.given.isBlank() && d.family.isBlank() && d.company.isBlank()) err = "Bitte einen Namen oder eine Firma eingeben."
-                    else vm.save(e.copy(draft = d))
+                    if (!d.hasName) err = "Bitte einen Namen oder eine Firma eingeben." else vm.save(e.copy(draft = d))
                 }.padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("Speichern", color = A.blueInk, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
@@ -624,105 +667,245 @@ private fun EditorScreen(s: ContactsState, vm: ContactsViewModel, e: CScreen.Edi
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (e.rawId == null && s.books.isNotEmpty()) {
-                Mono("Adressbuch")
+            // Foto
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                val newPhoto = d.newPhoto
+                val preview = remember(newPhoto) {
+                    newPhoto?.takeIf { it.isNotEmpty() }?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }
+                }
+                Box(Modifier.size(84.dp).clip(CircleShape).background(avatarColor(d.given + d.family)), contentAlignment = Alignment.Center) {
+                    when {
+                        preview != null -> Image(preview, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        newPhoto == null && e.hasPhoto && e.contactId != null -> Avatar(vm, e.contactId, d.given, true, 84.dp, s.photoStamp, highRes = true)
+                        else -> Text(initials("${d.given} ${d.family}".ifBlank { d.company.ifBlank { "?" } }), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 30.sp)
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LinkButton("Foto wählen") { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    if ((e.hasPhoto && newPhoto == null) || (newPhoto != null && newPhoto.isNotEmpty())) {
+                        TextButton(onClick = { d = d.copy(newPhoto = ByteArray(0)) }) { Text("Foto entfernen", color = A.redSoft) }
+                    }
+                }
+            }
+
+            if (e.rawId == null && s.targetBooks.isNotEmpty()) {
+                Mono("Speichern in")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    s.books.forEach { b -> Pill(b.label, d.book == b, { d = d.copy(book = b) }, dot = if (b.isNextcloud) A.blue else A.warn) }
+                    s.targetBooks.forEach { b ->
+                        Pill(b.label, b.same(d.book), { d = d.copy(book = b, groups = emptySet()); vm.loadGroups(b) }, dot = if (b.isNextcloud) A.blue else A.warn)
+                    }
                 }
                 if (d.book?.isNextcloud != true) Text("Dieses Adressbuch wird nicht mit Nextcloud synchronisiert.", color = A.warn, fontSize = 12.sp)
             }
-            Field("Vorname", d.given, cap = KeyboardCapitalization.Words) { d = d.copy(given = it); err = null }
-            Field("Nachname", d.family, cap = KeyboardCapitalization.Words) { d = d.copy(family = it); err = null }
+
+            Section("Name")
+            if (moreName) Field("Präfix (z.B. Dr.)", d.prefix, KeyboardCapitalization.Words) { d = d.copy(prefix = it) }
+            Field("Vorname", d.given, KeyboardCapitalization.Words) { d = d.copy(given = it); err = null }
+            if (moreName) Field("Zweiter Vorname", d.middle, KeyboardCapitalization.Words) { d = d.copy(middle = it) }
+            Field("Nachname", d.family, KeyboardCapitalization.Words) { d = d.copy(family = it); err = null }
+            if (moreName) {
+                Field("Suffix (z.B. jun.)", d.suffix, KeyboardCapitalization.Words) { d = d.copy(suffix = it) }
+                Field("Vorname phonetisch", d.phoneticGiven, KeyboardCapitalization.Words) { d = d.copy(phoneticGiven = it) }
+                Field("Nachname phonetisch", d.phoneticFamily, KeyboardCapitalization.Words) { d = d.copy(phoneticFamily = it) }
+            } else {
+                TextButton(onClick = { moreName = true }) { Text("+ Präfix, zweiter Vorname, Suffix, phonetisch", color = A.blueLight) }
+            }
+            Field("Spitzname", d.nickname, KeyboardCapitalization.Words) { d = d.copy(nickname = it); err = null }
             err?.let { Text(it, color = A.redSoft, fontSize = 13.sp) }
-            Field("Firma", d.company, cap = KeyboardCapitalization.Words) { d = d.copy(company = it); err = null }
-            Field("Position", d.jobTitle, cap = KeyboardCapitalization.Sentences) { d = d.copy(jobTitle = it) }
 
-            MultiSection("Telefon", d.phones, Types.phone, KeyboardType.Phone, Types::phoneLabel, add = Labeled("", android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)) { d = d.copy(phones = it) }
-            MultiSection("E-Mail", d.emails, Types.email, KeyboardType.Email, Types::emailLabel, add = Labeled("", android.provider.ContactsContract.CommonDataKinds.Email.TYPE_HOME)) { d = d.copy(emails = it) }
-            MultiSection("Adresse", d.addresses, Types.postal, KeyboardType.Text, Types::postalLabel, add = Labeled("", android.provider.ContactsContract.CommonDataKinds.StructuredPostal.TYPE_HOME), multiline = true) { d = d.copy(addresses = it) }
+            Section("Telefon")
+            LabeledList(d.phones, Types.phone, KeyboardType.Phone, Types::phoneLabel, "Nummer", Labeled("", Phone.TYPE_MOBILE)) { d = d.copy(phones = it) }
+            Section("E-Mail")
+            LabeledList(d.emails, Types.email, KeyboardType.Email, Types::emailLabel, "E-Mail", Labeled("", Email.TYPE_HOME)) { d = d.copy(emails = it) }
 
-            Mono("Geburtstag")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                val b = d.birthday
-                Box(
-                    Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(10.dp)).background(A.panel2).border(1.dp, A.line2, RoundedCornerShape(10.dp))
-                        .clickable(role = Role.Button) { pickBirthday = true }.padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.CenterStart,
+            Section("Arbeit")
+            Field("Firma", d.company, KeyboardCapitalization.Words) { d = d.copy(company = it); err = null }
+            Field("Abteilung", d.department, KeyboardCapitalization.Words) { d = d.copy(department = it) }
+            Field("Position", d.jobTitle, KeyboardCapitalization.Sentences) { d = d.copy(jobTitle = it) }
+
+            Section("Adressen")
+            d.addresses.forEachIndexed { i, a ->
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, A.line, RoundedCornerShape(14.dp)).padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(b?.let { "${it.day}. ${Dates.MONTHS[it.month - 1]}" + (it.year?.let { y -> " $y" } ?: "") } ?: "Kein Geburtstag", color = if (b != null) A.fg else A.dim, fontSize = 15.sp)
-                }
-                if (b != null) {
-                    Pill(if (b.year == null) "Ohne Jahr" else "Mit Jahr", b.year == null, {
-                        d = d.copy(birthday = if (b.year == null) b.copy(year = LocalDate.now().year - 30) else b.copy(year = null))
-                    })
-                    IconButton(onClick = { d = d.copy(birthday = null) }) { Icon(Icons.Default.Close, contentDescription = "Geburtstag entfernen", tint = A.muted) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TypeChip(Types.postalLabel(a)) {
+                            val idx = Types.postal.indexOfFirst { it.first == a.type }
+                            d = d.copy(addresses = d.addresses.toMutableList().also { l -> l[i] = a.copy(type = Types.postal[(idx + 1).mod(Types.postal.size)].first, label = null) })
+                        }
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { d = d.copy(addresses = d.addresses.toMutableList().also { l -> l.removeAt(i) }) }) {
+                            Icon(Icons.Default.Close, contentDescription = "Adresse entfernen", tint = A.muted)
+                        }
+                    }
+                    fun upd(n: PostalAddr) { d = d.copy(addresses = d.addresses.toMutableList().also { l -> l[i] = n }) }
+                    Field("Strasse und Nr.", a.street, KeyboardCapitalization.Words) { upd(a.copy(street = it)) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Field("PLZ", a.postcode, KeyboardCapitalization.None, KeyboardType.Number, Modifier.width(110.dp)) { upd(a.copy(postcode = it)) }
+                        Field("Ort", a.city, KeyboardCapitalization.Words, modifier = Modifier.weight(1f)) { upd(a.copy(city = it)) }
+                    }
+                    Field("Kanton / Region", a.region, KeyboardCapitalization.Words) { upd(a.copy(region = it)) }
+                    Field("Land", a.country, KeyboardCapitalization.Words) { upd(a.copy(country = it)) }
                 }
             }
-            Field("Website", d.website, type = KeyboardType.Uri) { d = d.copy(website = it) }
-            Field("Notiz", d.note, cap = KeyboardCapitalization.Sentences, lines = 3) { d = d.copy(note = it) }
+            AddButton("Adresse") { d = d.copy(addresses = d.addresses + PostalAddr()) }
+
+            Section("Wichtige Daten")
+            d.events.forEachIndexed { i, ev ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(
+                        Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(10.dp)).background(A.panel2).border(1.dp, A.line2, RoundedCornerShape(10.dp))
+                            .clickable(role = Role.Button) { pickDateFor = i }.padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) { Text(ev.date.text(Dates.MONTHS), color = A.fg, fontSize = 15.sp) }
+                    TypeChip(Types.eventLabel(ev)) {
+                        val idx = Types.event.indexOfFirst { it.first == ev.type }
+                        d = d.copy(events = d.events.toMutableList().also { l -> l[i] = ev.copy(type = Types.event[(idx + 1).mod(Types.event.size)].first, label = null) })
+                    }
+                    TypeChip(if (ev.date.year == null) "ohne Jahr" else "mit Jahr") {
+                        val nd = if (ev.date.year == null) ev.date.copy(year = LocalDate.now().year - 30) else ev.date.copy(year = null)
+                        d = d.copy(events = d.events.toMutableList().also { l -> l[i] = ev.copy(date = nd) })
+                    }
+                    IconButton(onClick = { d = d.copy(events = d.events.toMutableList().also { l -> l.removeAt(i) }) }) {
+                        Icon(Icons.Default.Close, contentDescription = "Datum entfernen", tint = A.muted)
+                    }
+                }
+            }
+            AddButton(if (d.events.none { it.type == Event.TYPE_BIRTHDAY }) "Geburtstag" else "Datum") {
+                val type = if (d.events.none { it.type == Event.TYPE_BIRTHDAY }) Event.TYPE_BIRTHDAY else Event.TYPE_ANNIVERSARY
+                d = d.copy(events = d.events + DateEntry(Birthday(1, 1, 1990), type))
+                pickDateFor = d.events.lastIndex
+            }
+
+            Section("Gruppen")
+            if (s.editGroups.isEmpty()) Hint(if (d.book?.isNextcloud == true) "In diesem Adressbuch gibt es noch keine Gruppen." else "Gruppen gibt es nur in Adressbüchern mit Gruppen.")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                s.editGroups.forEach { g ->
+                    val on = g.id in d.groups
+                    Pill(g.title, on, { d = d.copy(groups = if (on) d.groups - g.id else d.groups + g.id) })
+                }
+            }
+            if (d.book != null && d.book?.kind != BookKind.APP) AddButton("Neue Gruppe") { newGroup = "" }
+
+            Section("Website")
+            d.websites.forEachIndexed { i, w ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Field("Website", w, KeyboardCapitalization.None, KeyboardType.Uri, Modifier.weight(1f)) { v ->
+                        d = d.copy(websites = d.websites.toMutableList().also { l -> l[i] = v })
+                    }
+                    IconButton(onClick = { d = d.copy(websites = d.websites.toMutableList().also { l -> l.removeAt(i) }) }) {
+                        Icon(Icons.Default.Close, contentDescription = "Website entfernen", tint = A.muted)
+                    }
+                }
+            }
+            AddButton("Website") { d = d.copy(websites = d.websites + "") }
+
+            Section("Beziehungen")
+            LabeledList(d.relations, Types.relation, KeyboardType.Text, Types::relationLabel, "Name", Labeled("", Relation.TYPE_PARTNER), allowEmpty = true) { d = d.copy(relations = it) }
+
+            Section("Notiz")
+            Field("Notiz", d.note, KeyboardCapitalization.Sentences, lines = 3) { d = d.copy(note = it) }
             Spacer(Modifier.height(40.dp))
         }
     }
-    if (pickBirthday) {
-        val b = d.birthday
-        val init = LocalDate.of(b?.year ?: 1990, b?.month ?: 1, b?.day ?: 1)
-        val st = rememberDatePickerState(initialSelectedDateMillis = Dates.utcMidnight(init), initialDisplayMode = androidx.compose.material3.DisplayMode.Input)
+
+    pickDateFor?.let { i ->
+        val ev = d.events.getOrNull(i)
+        if (ev == null) { pickDateFor = null; return@let }
+        val init = runCatching { LocalDate.of(ev.date.year ?: 2000, ev.date.month, ev.date.day) }.getOrDefault(LocalDate.of(2000, 1, 1))
+        val st = rememberDatePickerState(initialSelectedDateMillis = Dates.utcMidnight(init), initialDisplayMode = DisplayMode.Input)
         DatePickerDialog(
-            onDismissRequest = { pickBirthday = false },
+            onDismissRequest = { pickDateFor = null },
             confirmButton = {
                 TextButton(onClick = {
                     st.selectedDateMillis?.let { ms ->
                         val ld = Dates.utcDate(ms)
-                        d = d.copy(birthday = Birthday(ld.monthValue, ld.dayOfMonth, if (b != null && b.year == null) null else ld.year))
+                        val nd = Birthday(ld.monthValue, ld.dayOfMonth, if (ev.date.year == null) null else ld.year)
+                        d = d.copy(events = d.events.toMutableList().also { l -> l[i] = ev.copy(date = nd) })
                     }
-                    pickBirthday = false
+                    pickDateFor = null
                 }) { Text("OK") }
             },
-            dismissButton = { TextButton(onClick = { pickBirthday = false }) { Text("Abbrechen") } },
+            dismissButton = { TextButton(onClick = { pickDateFor = null }) { Text("Abbrechen") } },
         ) { DatePicker(state = st) }
+    }
+
+    newGroup?.let { name ->
+        AlertDialog(
+            onDismissRequest = { newGroup = null },
+            containerColor = A.panel,
+            title = { Text("Neue Gruppe") },
+            text = {
+                OutlinedTextField(value = name, onValueChange = { newGroup = it }, singleLine = true, label = { Text("Name") }, colors = fieldColors(),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val book = d.book
+                    newGroup = null
+                    vm.createGroup(book, name) { id -> d = d.copy(groups = d.groups + id) }
+                }) { Text("Erstellen") }
+            },
+            dismissButton = { TextButton(onClick = { newGroup = null }) { Text("Abbrechen") } },
+        )
     }
 }
 
 @Composable
-private fun Field(label: String, value: String, cap: KeyboardCapitalization = KeyboardCapitalization.None, type: KeyboardType = KeyboardType.Text, lines: Int = 1, onChange: (String) -> Unit) {
+private fun Section(title: String) {
+    Mono(title, color = A.blue, modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun AddButton(what: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) { Text("+ $what hinzufügen", color = A.blueLight, fontWeight = FontWeight.SemiBold) }
+}
+
+@Composable
+private fun TypeChip(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier.height(40.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, A.line2, RoundedCornerShape(10.dp))
+            .clickable(role = Role.Button, onClickLabel = "Typ ändern", onClick = onClick).padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(text, color = A.fg2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
+}
+
+@Composable
+private fun Field(
+    label: String, value: String, cap: KeyboardCapitalization = KeyboardCapitalization.None, type: KeyboardType = KeyboardType.Text,
+    modifier: Modifier = Modifier.fillMaxWidth(), lines: Int = 1, onChange: (String) -> Unit,
+) {
     OutlinedTextField(
         value = value, onValueChange = onChange, label = { Text(label) },
-        singleLine = lines == 1, minLines = lines, modifier = Modifier.fillMaxWidth(), colors = fieldColors(),
+        singleLine = lines == 1, minLines = lines, modifier = modifier, colors = fieldColors(),
         keyboardOptions = KeyboardOptions(capitalization = cap, keyboardType = type),
     )
 }
 
 @Composable
-private fun MultiSection(
-    title: String, items: List<Labeled>, types: List<Pair<Int, String>>, keyboard: KeyboardType,
-    labelOf: (Labeled) -> String, add: Labeled, multiline: Boolean = false, onChange: (List<Labeled>) -> Unit,
+private fun LabeledList(
+    items: List<Labeled>, types: List<Pair<Int, String>>, keyboard: KeyboardType, labelOf: (Labeled) -> String,
+    hint: String, add: Labeled, allowEmpty: Boolean = true, onChange: (List<Labeled>) -> Unit,
 ) {
-    Mono(title)
     items.forEachIndexed { i, item ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = item.value, onValueChange = { v -> onChange(items.toMutableList().also { it[i] = item.copy(value = v) }) },
-                label = { Text(labelOf(item)) }, singleLine = !multiline, minLines = if (multiline) 2 else 1,
-                modifier = Modifier.weight(1f), colors = fieldColors(),
-                keyboardOptions = KeyboardOptions(keyboardType = keyboard, capitalization = if (multiline) KeyboardCapitalization.Words else KeyboardCapitalization.None),
+                label = { Text(hint) }, singleLine = true, modifier = Modifier.weight(1f), colors = fieldColors(),
+                keyboardOptions = KeyboardOptions(keyboardType = keyboard, capitalization = if (keyboard == KeyboardType.Text) KeyboardCapitalization.Words else KeyboardCapitalization.None),
             )
             Spacer(Modifier.width(6.dp))
-            // Typ durchschalten (Mobil → Privat → Arbeit → Andere)
-            Box(
-                Modifier.height(40.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, A.line2, RoundedCornerShape(10.dp))
-                    .clickable(role = Role.Button, onClickLabel = "Typ ändern") {
-                        val idx = types.indexOfFirst { it.first == item.type }
-                        val next = types[(idx + 1).mod(types.size)].first
-                        onChange(items.toMutableList().also { it[i] = item.copy(type = next, label = null) })
-                    }.padding(horizontal = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) { Text(labelOf(item), color = A.fg2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
-            IconButton(onClick = { onChange(items.toMutableList().also { it.removeAt(i) }) }) {
-                Icon(Icons.Default.Close, contentDescription = "$title entfernen", tint = A.muted)
+            TypeChip(labelOf(item)) {
+                val idx = types.indexOfFirst { it.first == item.type }
+                onChange(items.toMutableList().also { it[i] = item.copy(type = types[(idx + 1).mod(types.size)].first, label = null) })
+            }
+            if (allowEmpty || items.size > 1) IconButton(onClick = { onChange(items.toMutableList().also { it.removeAt(i) }) }) {
+                Icon(Icons.Default.Close, contentDescription = "Entfernen", tint = A.muted)
             }
         }
     }
-    TextButton(onClick = { onChange(items + add) }) { Text("+ $title hinzufügen", color = A.blueLight, fontWeight = FontWeight.SemiBold) }
+    AddButton(hint) { onChange(items + add) }
 }
 
 // ------------------------------------------------------------------ Einstellungen
@@ -730,6 +913,11 @@ private fun MultiSection(
 @Composable
 private fun SettingsSheet(s: ContactsState, vm: ContactsViewModel) {
     val ctx = LocalContext.current
+    var sources by remember(s.sourceBooks) { mutableStateOf(s.sourceBooks.filter { it.kind == BookKind.DEVICE }.map { it.key }.toSet()) }
+    var confirm by remember { mutableStateOf(false) }
+    val target = s.defaultBook?.takeIf { it.isNextcloud } ?: s.nextcloudBooks.firstOrNull()
+    val toMove = s.contacts.count { c -> !c.synced && c.books.any { it.key in sources } }
+
     ModalBottomSheet(onDismissRequest = { vm.showSettings(false) }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = A.panel) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(start = 18.dp, end = 18.dp, bottom = 24.dp),
@@ -742,20 +930,54 @@ private fun SettingsSheet(s: ContactsState, vm: ContactsViewModel) {
                 Pill("Nachname", s.prefs.sortByFamily, { vm.updatePrefs { it.copy(sortByFamily = true) } })
             }
             SwitchRow("Nur Nextcloud-Kontakte", s.prefs.onlyNextcloud, { v -> vm.updatePrefs { it.copy(onlyNextcloud = v) } }, subtitle = "Kontakte, die nur auf dem Handy liegen, ausblenden")
-            Mono("Standard-Adressbuch für neue Kontakte")
+            Mono("Neue Kontakte speichern in")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                s.books.forEach { b ->
-                    Pill(b.label, s.defaultBook == b, { vm.updatePrefs { it.copy(defaultBook = "${b.type}/${b.name}") } }, dot = if (b.isNextcloud) A.blue else A.warn)
-                }
+                s.targetBooks.forEach { b -> Pill(b.label, b.same(s.defaultBook), { vm.updatePrefs { it.copy(defaultBook = b.key) } }, dot = if (b.isNextcloud) A.blue else A.warn) }
             }
+
+            HorizontalDivider(color = A.line)
+            Mono("In Nextcloud übernehmen", color = A.blue)
+            if (target == null) {
+                Hint("Zuerst in DAVx⁵ im Reiter „CardDAV“ ein Adressbuch aktivieren.")
+            } else if (s.sourceBooks.isEmpty()) {
+                Hint("Alle Kontakte liegen bereits in der Nextcloud.")
+            } else {
+                Hint("Kopiert die Kontakte nach „${target.label}“ und entfernt sie danach vom Gerät bzw. aus Google. Fotos, Favoriten und alle Felder werden mitgenommen.")
+                s.sourceBooks.forEach { b ->
+                    val on = b.key in sources
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 46.dp).clickable(role = Role.Checkbox) { sources = if (on) sources - b.key else sources + b.key },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier.size(22.dp).clip(RoundedCornerShape(6.dp)).then(if (on) Modifier.background(A.blue) else Modifier.border(2.dp, Color(0xFF5A6B88), RoundedCornerShape(6.dp))),
+                            contentAlignment = Alignment.Center,
+                        ) { if (on) Icon(Icons.Default.Check, contentDescription = null, tint = A.blueInk, modifier = Modifier.size(14.dp)) }
+                        Spacer(Modifier.width(12.dp))
+                        Text(b.label, color = A.fg, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Mono("${b.count}", size = 11, spacing = 0.2)
+                    }
+                }
+                LinkButton("$toMove Kontakte übernehmen", Modifier.fillMaxWidth(), primary = toMove > 0) { if (toMove > 0) confirm = true }
+            }
+
             HorizontalDivider(color = A.line)
             Mono("Synchronisation", color = A.blue)
             Text("DAVx⁵: ${if (s.davx) "installiert" else "fehlt"} · Nextcloud-Adressbücher: ${s.nextcloudBooks.size}", color = A.fg2, fontSize = 14.sp)
-            Hint("Adressbücher aktivierst du in DAVx⁵ beim Konto im Reiter „CardDAV“.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LinkButton(if (s.syncing) "Synchronisiert…" else "Jetzt synchronisieren", Modifier.weight(1f)) { vm.sync() }
                 LinkButton("DAVx⁵ öffnen", Modifier.weight(1f)) { if (!SyncHelper.openApp(ctx, DAVX_PACKAGE)) SyncHelper.openUrl(ctx, SyncHelper.FDROID_DAVX) }
             }
         }
+    }
+    if (confirm && target != null) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            containerColor = A.panel,
+            title = { Text("$toMove Kontakte übernehmen?") },
+            text = { Text("Sie werden nach „${target.label}“ kopiert und danach auf dem Gerät bzw. in Google gelöscht. Messenger-Einträge (WhatsApp, Threema …) bleiben unverändert.", color = A.fg2) },
+            confirmButton = { TextButton(onClick = { confirm = false; vm.moveAll(sources, target) }) { Text("Übernehmen", color = A.blueLight) } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Abbrechen") } },
+        )
     }
 }
