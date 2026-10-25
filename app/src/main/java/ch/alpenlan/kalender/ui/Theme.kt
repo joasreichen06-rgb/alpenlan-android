@@ -51,8 +51,10 @@ val MonoLabel = TextStyle(fontFamily = PlexMono, fontWeight = FontWeight.Medium,
 
 private val base = Typography()
 private val typography = Typography(
-    displayLarge = base.displayLarge.copy(fontFamily = Syne),
-    headlineLarge = base.headlineLarge.copy(fontFamily = Syne),
+    // Zeit-/Datumsauswahl nutzt diese Stile – Syne ist dafür zu breit (Ziffern wurden abgeschnitten).
+    displayLarge = base.displayLarge.copy(fontFamily = Manrope, fontWeight = FontWeight.Medium),
+    displayMedium = base.displayMedium.copy(fontFamily = Manrope, fontWeight = FontWeight.Medium),
+    headlineLarge = base.headlineLarge.copy(fontFamily = Manrope, fontWeight = FontWeight.SemiBold),
     headlineMedium = base.headlineMedium.copy(fontFamily = Manrope, fontWeight = FontWeight.Bold),
     headlineSmall = base.headlineSmall.copy(fontFamily = Manrope, fontWeight = FontWeight.Bold),
     titleLarge = base.titleLarge.copy(fontFamily = Manrope, fontWeight = FontWeight.Bold),
