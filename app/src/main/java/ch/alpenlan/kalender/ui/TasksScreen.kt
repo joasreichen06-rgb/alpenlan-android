@@ -145,7 +145,7 @@ fun TasksScreen(s: UiState, vm: AppViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Dot(dotColor(list.color), 10.dp)
                         Spacer(Modifier.width(8.dp))
-                        Text(list.name, color = A.fg, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(list.label, color = A.fg, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         Mono(if (tasks.size == 1) "1 Aufgabe" else "${tasks.size} Aufgaben", size = 11, spacing = 0.2)
                     }
                     Spacer(Modifier.height(6.dp))

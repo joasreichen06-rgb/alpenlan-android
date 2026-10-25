@@ -466,7 +466,10 @@ private fun TaskEditor(s: UiState, vm: AppViewModel, edit: Sheet.EditTask) {
     )
     Mono("Liste")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        s.lists.forEach { l -> Pill(l.name, d.listId == l.id, { d = d.copy(listId = l.id) }, dot = dotColor(l.color)) }
+        s.lists.forEach { l -> Pill(l.label, d.listId == l.id, { d = d.copy(listId = l.id) }, dot = dotColor(l.color)) }
+    }
+    if (s.list(d.listId)?.isSynced == false) {
+        Text("Diese Liste liegt nur auf dem Handy und wird nicht mit Nextcloud synchronisiert.", color = A.warn, fontSize = 12.sp)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         FieldButton("Fällig", d.due?.let { Dates.wdShortDate(it) } ?: "Ohne Datum", Modifier.weight(1f)) { pick = true }
@@ -541,7 +544,7 @@ private fun VisibilitySheet(s: UiState, vm: AppViewModel) {
             s.lists.forEach { l ->
                 val on = l.id !in s.settings.hiddenLists
                 val open = s.liveTasks.count { it.listId == l.id && !it.done }
-                VisRow(l.name, on, dotColor(l.color), square = false, trailing = "$open offen") { vm.toggleList(l.id) }
+                VisRow(l.label, on, dotColor(l.color), square = false, trailing = "$open offen") { vm.toggleList(l.id) }
             }
         }
     }

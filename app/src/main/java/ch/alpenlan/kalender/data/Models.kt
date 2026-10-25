@@ -47,7 +47,11 @@ data class TaskList(
     val color: Int,
     val accountName: String,
     val accountType: String,
-)
+) {
+    /** Liste wird von DAVx⁵ mit Nextcloud synchronisiert (sonst nur auf dem Gerät). */
+    val isSynced: Boolean get() = accountType == DAVX_ACCOUNT_TYPE
+    val label: String get() = if (isSynced) name else "$name (nur Gerät)"
+}
 
 data class TaskItem(
     val id: Long,

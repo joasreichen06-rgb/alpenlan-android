@@ -327,6 +327,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val s = _state.value
         val list = listId?.let { s.list(it) }
             ?: s.lists.firstOrNull { it.id == s.settings.defaultListId }
+            ?: s.lists.firstOrNull { it.isSynced && it.id !in s.settings.hiddenLists }
+            ?: s.lists.firstOrNull { it.isSynced }
             ?: s.lists.firstOrNull { it.id !in s.settings.hiddenLists }
             ?: s.lists.firstOrNull()
             ?: return null

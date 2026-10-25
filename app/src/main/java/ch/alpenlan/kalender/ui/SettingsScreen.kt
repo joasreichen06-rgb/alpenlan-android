@@ -101,7 +101,7 @@ fun SettingsScreen(s: UiState, vm: AppViewModel) {
                 }
                 Label("Standardliste")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    s.lists.forEach { l -> Pill(l.name, st.defaultListId == l.id, { vm.updateSettings { it.copy(defaultListId = l.id) } }, dot = dotColor(l.color)) }
+                    s.lists.forEach { l -> Pill(l.label, st.defaultListId == l.id, { vm.updateSettings { it.copy(defaultListId = l.id) } }, dot = dotColor(l.color)) }
                 }
                 SwitchRow("Aufgaben im Kalender anzeigen", st.tasksInCalendar, { v -> vm.updateSettings { it.copy(tasksInCalendar = v) } })
                 SwitchRow("Erledigte Aufgaben im Kalender", st.doneTasksInCalendar, { v -> vm.updateSettings { it.copy(doneTasksInCalendar = v) } })
