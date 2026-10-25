@@ -1,4 +1,4 @@
-# Alpenlan Kalender (Android)
+# Alpenlan Kalender & Kontakte (Android)
 
 Kalender- und Aufgaben-App im Alpenlan-Look für die eigene Nextcloud – ohne Google-Dienste, GrapheneOS-tauglich.
 
@@ -34,3 +34,9 @@ Nextcloud (cloud.alpenlan.com)  ⇄  DAVx⁵  ⇄  Android-Speicher  ⇄  Alpenl
 GitHub Actions baut bei jedem Push eine APK. Ein Release (für Obtainium) entsteht, sobald `version.txt` eine neue Versionsnummer enthält.
 Signiert wird mit den Secrets `KEYSTORE_B64` und `KEYSTORE_PASSWORD` (Alias `alpenlan`).
 Lokal: `./gradlew assembleDebug` (Android SDK nötig).
+
+## Alpenlan Kontakte
+
+Zweites App-Symbol in derselben APK. Liest und schreibt die Android-Kontakte, die DAVx⁵ per CardDAV mit Nextcloud abgleicht
+(Kontotyp `bitfire.at.davdroid.address_book`): Suche, Favoriten, Geburtstage, A–Z-Leiste, Anrufen/SMS/E-Mail/Karte,
+Erstellen/Bearbeiten/Löschen mit Rückgängig.
