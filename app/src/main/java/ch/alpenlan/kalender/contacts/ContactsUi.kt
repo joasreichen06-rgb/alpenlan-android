@@ -233,7 +233,7 @@ private fun MovingDialog(p: MoveProgress) {
     AlertDialog(
         onDismissRequest = {},
         containerColor = A.panel,
-        title = { Text("Übernehme in Nextcloud …") },
+        title = { Text(p.title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 LinearProgressIndicator(progress = { if (p.total == 0) 0f else p.done / p.total.toFloat() }, modifier = Modifier.fillMaxWidth(), color = A.blue, trackColor = A.line2)
@@ -531,6 +531,17 @@ private fun DetailScreen(s: ContactsState, vm: ContactsViewModel) {
                     when (b?.kind) { BookKind.NEXTCLOUD -> "Nextcloud · ${b?.label}"; BookKind.DEVICE -> "Nur auf dem Gerät"; null -> ""; else -> b?.label ?: "" },
                     size = 10, spacing = 1.0, color = if (b?.isNextcloud == true) A.blue else A.warn,
                 )
+            }
+            if (det.book?.isNextcloud == true && det.photoOnlyElsewhere) {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(A.blue.copy(alpha = 0.10f))
+                        .border(1.dp, Color(0xFF2B4466), RoundedCornerShape(14.dp)).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Foto ist nicht in der Nextcloud", color = A.fg, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Hint("Das angezeigte Foto stammt aus einer anderen App (z.B. WhatsApp) oder vom Gerät.")
+                    LinkButton("Foto in Nextcloud speichern", Modifier.fillMaxWidth(), primary = true) { vm.copyPhoto(det) }
+                }
             }
             if (det.book?.isNextcloud != true && s.nextcloudBooks.isNotEmpty()) {
                 LinkButton("In Nextcloud verschieben", Modifier.fillMaxWidth(), primary = true) { vm.moveOne(det) }
@@ -959,6 +970,13 @@ private fun SettingsSheet(s: ContactsState, vm: ContactsViewModel) {
                     }
                 }
                 LinkButton("$toMove Kontakte übernehmen", Modifier.fillMaxWidth(), primary = toMove > 0) { if (toMove > 0) confirm = true }
+            }
+
+            if (s.missingPhotos > 0) {
+                HorizontalDivider(color = A.line)
+                Mono("Fotos", color = A.blue)
+                Hint("${s.missingPhotos} Nextcloud-Kontakte zeigen ein Foto aus WhatsApp, Threema oder vom Gerät, das nicht in der Nextcloud gespeichert ist.")
+                LinkButton("${s.missingPhotos} Fotos in Nextcloud speichern", Modifier.fillMaxWidth(), primary = true) { vm.copyAllPhotos() }
             }
 
             HorizontalDivider(color = A.line)

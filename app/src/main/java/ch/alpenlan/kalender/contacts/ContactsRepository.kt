@@ -147,7 +147,10 @@ data class ContactDetail(
     val starred: Boolean,
     val hasPhoto: Boolean,
     val draft: ContactDraft,
+    /** Hat der bearbeitbare (Nextcloud-)Rohkontakt selbst ein Foto? Sonst stammt es z.B. von WhatsApp. */
+    val rawHasPhoto: Boolean = false,
 ) {
+    val photoOnlyElsewhere get() = hasPhoto && !rawHasPhoto
     val birthday get() = draft.events.firstOrNull { it.type == Event.TYPE_BIRTHDAY }?.date
 }
 
@@ -363,7 +366,7 @@ class ContactsRepository(private val ctx: Context) {
             emails = emails.distinctBy { it.value.lowercase() },
             addresses = addrs, events = events.sortedBy { it.type }, websites = webs.distinct(), relations = rels, groups = groups,
         )
-        return ContactDetail(contactId, lookup, rawId, main?.second, raws, display, starred, hasPhoto, d)
+        return ContactDetail(contactId, lookup, rawId, main?.second, raws, display, starred, hasPhoto, d, rawId?.let { rawHasPhoto(it) } ?: false)
     }
 
     fun photo(contactId: Long, highRes: Boolean): Bitmap? = runCatching {
@@ -379,6 +382,54 @@ class ContactsRepository(private val ctx: Context) {
         val scaled = if (side > 720) Bitmap.createScaledBitmap(square, 720, 720, true) else square
         ByteArrayOutputStream().use { out -> scaled.compress(Bitmap.CompressFormat.JPEG, 85, out); out.toByteArray() }
     }.getOrNull()
+
+    fun rawHasPhoto(rawId: Long): Boolean {
+        cr.query(Data.CONTENT_URI, arrayOf(Data._ID), "${Data.RAW_CONTACT_ID}=? AND ${Data.MIMETYPE}=? AND ${Photo.PHOTO} IS NOT NULL",
+            arrayOf(rawId.toString(), Photo.CONTENT_ITEM_TYPE), null)?.use { return it.count > 0 }
+        return false
+    }
+
+    /** Angezeigtes Foto (z.B. von WhatsApp) in den Nextcloud-Rohkontakt kopieren, damit DAVx⁵ es hochlädt. */
+    fun copyPhotoToRaw(contactId: Long, rawId: Long): Boolean {
+        if (!canWrite()) return false
+        val raw = photoBytes(contactId) ?: return false
+        val bytes = runCatching {
+            val bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return false
+            val side = minOf(bmp.width, bmp.height)
+            val sq = Bitmap.createBitmap(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side)
+            val sc = if (side > 720) Bitmap.createScaledBitmap(sq, 720, 720, true) else sq
+            ByteArrayOutputStream().use { o -> sc.compress(Bitmap.CompressFormat.JPEG, 85, o); o.toByteArray() }
+        }.getOrNull() ?: return false
+        val ops = arrayListOf(
+            ContentProviderOperation.newDelete(Data.CONTENT_URI)
+                .withSelection("${Data.RAW_CONTACT_ID}=? AND ${Data.MIMETYPE}=?", arrayOf(rawId.toString(), Photo.CONTENT_ITEM_TYPE)).build(),
+            ContentProviderOperation.newInsert(Data.CONTENT_URI)
+                .withValue(Data.RAW_CONTACT_ID, rawId).withValue(Data.MIMETYPE, Photo.CONTENT_ITEM_TYPE)
+                .withValue(Photo.PHOTO, bytes).withValue(Data.IS_SUPER_PRIMARY, 1).build(),
+        )
+        return runCatching { cr.applyBatch(ContactsContract.AUTHORITY, ops); true }.getOrDefault(false)
+    }
+
+    /** Nextcloud-Kontakte, die ein Foto anzeigen, aber selbst keines haben: (Kontakt-ID, Rohkontakt-ID). */
+    fun photosMissingInNextcloud(): List<Pair<Long, Long>> {
+        if (!canRead()) return emptyList()
+        val withPhoto = HashSet<Long>()
+        cr.query(Contacts.CONTENT_URI, arrayOf(Contacts._ID), "${Contacts.PHOTO_ID} IS NOT NULL", null, null)?.use { c ->
+            while (c.moveToNext()) withPhoto += c.getLong(0)
+        }
+        val rawWithPhoto = HashSet<Long>()
+        cr.query(Data.CONTENT_URI, arrayOf(Data.RAW_CONTACT_ID), "${Data.MIMETYPE}=? AND ${Photo.PHOTO} IS NOT NULL", arrayOf(Photo.CONTENT_ITEM_TYPE), null)?.use { c ->
+            while (c.moveToNext()) rawWithPhoto += c.getLong(0)
+        }
+        val out = mutableListOf<Pair<Long, Long>>()
+        cr.query(RawContacts.CONTENT_URI, arrayOf(RawContacts._ID, RawContacts.CONTACT_ID, RawContacts.ACCOUNT_NAME, RawContacts.ACCOUNT_TYPE), "${RawContacts.DELETED}=0", null, null)?.use { c ->
+            while (c.moveToNext()) {
+                val raw = c.getLong(0); val cid = c.getLong(1)
+                if (cid in withPhoto && raw !in rawWithPhoto && AddressBook(c.getString(2) ?: "", c.getString(3) ?: "").isNextcloud) out += cid to raw
+            }
+        }
+        return out
+    }
 
     private fun photoBytes(contactId: Long): ByteArray? = runCatching {
         val uri = ContentUris.withAppendedId(Contacts.CONTENT_URI, contactId)

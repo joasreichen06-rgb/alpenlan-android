@@ -35,7 +35,7 @@ sealed interface CScreen {
     data class Edit(val contactId: Long?, val rawId: Long?, val draft: ContactDraft, val hasPhoto: Boolean = false) : CScreen
 }
 
-data class MoveProgress(val done: Int, val total: Int, val failed: Int = 0)
+data class MoveProgress(val done: Int, val total: Int, val failed: Int = 0, val title: String = "Übernehme in Nextcloud …")
 
 data class ContactsState(
     val loaded: Boolean = false,
@@ -55,6 +55,7 @@ data class ContactsState(
     val showSettings: Boolean = false,
     val today: LocalDate = LocalDate.now(),
     val photoStamp: Long = 0,
+    val missingPhotos: Int = 0,
 ) {
     val nextcloudBooks get() = books.filter { it.isNextcloud }
     /** Adressbücher, in die man sinnvoll speichern kann: Nextcloud zuerst, dann das Telefon. */
@@ -118,11 +119,12 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
         val r = withContext(Dispatchers.IO) {
             Triple(runCatching { repo.summaries() }.getOrDefault(emptyList()), runCatching { repo.addressBooks() }.getOrDefault(emptyList()), repo.canRead())
         }
+        val missing = withContext(Dispatchers.IO) { runCatching { repo.photosMissingInNextcloud().size }.getOrDefault(0) }
         val detailId = (_s.value.screen as? CScreen.Detail)?.id
         val detail = if (detailId != null) withContext(Dispatchers.IO) { runCatching { repo.detail(detailId) }.getOrNull() } else null
         _s.update {
             it.copy(
-                loaded = true, contacts = r.first, books = r.second, permission = r.third,
+                loaded = true, missingPhotos = missing, contacts = r.first, books = r.second, permission = r.third,
                 davx = SyncHelper.isDavxInstalled(app),
                 detail = detail ?: it.detail.takeIf { detailId == null },
                 screen = if (detailId != null && detail == null) CScreen.Home else it.screen,
@@ -267,6 +269,36 @@ class ContactsViewModel(app: Application) : AndroidViewModel(app) {
             toast(if (failed == 0) "${ids.size} Kontakte in Nextcloud übernommen" else "${ids.size - failed} übernommen, $failed fehlgeschlagen")
             load()
             repo.requestSync(listOf(target))
+        }
+    }
+
+    /** Foto eines Kontakts in den Nextcloud-Eintrag übernehmen. */
+    fun copyPhoto(d: ContactDetail) {
+        val raw = d.rawId ?: return
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { repo.copyPhotoToRaw(d.id, raw) }.getOrDefault(false) }
+            toast(if (ok) "Foto gespeichert – wird hochgeladen" else "Foto konnte nicht übernommen werden")
+            clearPhotos(); load()
+            repo.requestSync(_s.value.nextcloudBooks)
+        }
+    }
+
+    /** Für alle Nextcloud-Kontakte mit fremdem Foto (WhatsApp, Gerät …) das Foto übernehmen. */
+    fun copyAllPhotos() {
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { runCatching { repo.photosMissingInNextcloud() }.getOrDefault(emptyList()) }
+            if (list.isEmpty()) { toast("Alle Fotos sind bereits in Nextcloud"); return@launch }
+            _s.update { it.copy(moving = MoveProgress(0, list.size, title = "Fotos in Nextcloud speichern …"), showSettings = false) }
+            var failed = 0
+            list.forEachIndexed { i, (cid, raw) ->
+                if (!withContext(Dispatchers.IO) { runCatching { repo.copyPhotoToRaw(cid, raw) }.getOrDefault(false) }) failed++
+                _s.update { it.copy(moving = MoveProgress(i + 1, list.size, failed, "Fotos in Nextcloud speichern …")) }
+            }
+            _s.update { it.copy(moving = null) }
+            clearPhotos()
+            toast(if (failed == 0) "${list.size} Fotos gespeichert – werden hochgeladen" else "${list.size - failed} Fotos gespeichert, $failed fehlgeschlagen")
+            load()
+            repo.requestSync(_s.value.nextcloudBooks)
         }
     }
 
