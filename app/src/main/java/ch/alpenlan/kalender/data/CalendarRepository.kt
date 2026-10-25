@@ -64,7 +64,9 @@ class CalendarRepository(private val ctx: Context) {
             Instances.DESCRIPTION, Instances.DISPLAY_COLOR, Instances.RRULE, Instances.RDATE,
         )
         val out = mutableListOf<EventItem>()
-        cr.query(uri, proj, "${Instances.VISIBLE}=1", null, "${Instances.BEGIN} ASC")?.use { c ->
+        // Bewusst ohne VISIBLE-Filter: Das ist die Sichtbarkeit anderer Kalender-Apps (z.B. Samsung).
+        // Was Alpenlan zeigt, steuern die eigenen Einstellungen (ausgeblendete Kalender).
+        cr.query(uri, proj, null, null, "${Instances.BEGIN} ASC")?.use { c ->
             while (c.moveToNext()) {
                 val b = c.getLong(4)
                 var e = c.getLong(5)

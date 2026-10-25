@@ -35,6 +35,8 @@ object ReminderEngine {
     private const val RECHECK = 60 * 60_000L            // spätestens stündlich neu prüfen
     private const val ACTION = "ch.alpenlan.kalender.REMINDER_ALARM"
 
+    @Volatile private var hidden: Set<Long> = emptySet()
+
     private data class Due(val key: String, val eventId: Long, val begin: Long, val title: String, val text: String, val alarm: Long)
 
     fun ensureChannel(ctx: Context) {
@@ -60,7 +62,9 @@ object ReminderEngine {
     @Synchronized
     fun run(ctx: Context) {
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) return
-        val enabled = runCatching { runBlocking { SettingsStore(ctx).flow.first().notifications } }.getOrDefault(true)
+        val settings = runCatching { runBlocking { SettingsStore(ctx).flow.first() } }.getOrNull()
+        val enabled = settings?.notifications ?: true
+        hidden = settings?.hiddenCalendars ?: emptySet()
         val now = System.currentTimeMillis()
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val fired = prefs.getStringSet("fired", emptySet())!!.toMutableSet()
@@ -87,9 +91,10 @@ object ReminderEngine {
         val inst = mutableListOf<Inst>()
         val uri = Instances.CONTENT_URI.buildUpon().also { ContentUris.appendId(it, from); ContentUris.appendId(it, to) }.build()
         runCatching {
-            cr.query(uri, arrayOf(Instances.EVENT_ID, Instances.BEGIN, Instances.END, Instances.TITLE, Instances.ALL_DAY, Instances.EVENT_LOCATION, Instances.HAS_ALARM),
-                "${Instances.VISIBLE}=1 AND ${Instances.HAS_ALARM}=1", null, null)?.use { c ->
+            cr.query(uri, arrayOf(Instances.EVENT_ID, Instances.BEGIN, Instances.END, Instances.TITLE, Instances.ALL_DAY, Instances.EVENT_LOCATION, Instances.CALENDAR_ID),
+                "${Instances.HAS_ALARM}=1", null, null)?.use { c ->
                 while (c.moveToNext()) {
+                    if (c.getLong(6) in hidden) continue
                     inst += Inst(c.getLong(0), c.getLong(1), c.getLong(2), c.getString(3)?.takeIf { it.isNotBlank() } ?: "Termin", c.getInt(4) == 1, c.getString(5)?.takeIf { it.isNotBlank() })
                 }
             }
