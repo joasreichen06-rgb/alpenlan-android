@@ -31,6 +31,6 @@ Nextcloud (cloud.alpenlan.com)  ⇄  DAVx⁵  ⇄  Android-Speicher  ⇄  Alpenl
 
 ## Build
 
-GitHub Actions baut bei jedem Push eine APK (Artefakt) und bei Tags `v*` ein Release.
+GitHub Actions baut bei jedem Push eine APK. Ein Release (für Obtainium) entsteht, sobald `version.txt` eine neue Versionsnummer enthält.
 Signiert wird mit den Secrets `KEYSTORE_B64` und `KEYSTORE_PASSWORD` (Alias `alpenlan`).
 Lokal: `./gradlew assembleDebug` (Android SDK nötig).
