@@ -52,6 +52,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -142,18 +145,7 @@ private fun Header(s: UiState, vm: AppViewModel) {
         }
         Row(Modifier.fillMaxWidth().height(50.dp), verticalAlignment = Alignment.CenterVertically) {
             val (main, accent) = title(s)
-            val density = LocalDensity.current
-            val avail = if (isCal) 262f else 330f
-            val size = (avail / ((main + accent).length * 0.8f)).coerceIn(16f, 30f) / density.fontScale
-            Text(
-                buildAnnotatedString {
-                    append(main.uppercase())
-                    withStyle(SpanStyle(color = A.blue)) { append(accent.uppercase()) }
-                },
-                modifier = Modifier.weight(1f),
-                fontFamily = Syne, fontWeight = FontWeight.ExtraBold, fontSize = size.sp,
-                letterSpacing = (-0.3).sp, color = A.fg, maxLines = 1, softWrap = false,
-            )
+            FitTitle(main, accent, Modifier.weight(1f))
             if (isCal) {
                 IconButton(onClick = { vm.shift(-1) }) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Zurück", tint = A.muted)
@@ -163,6 +155,24 @@ private fun Header(s: UiState, vm: AppViewModel) {
                 }
             }
         }
+    }
+}
+
+/** Titel, der immer ganz sichtbar ist: Schriftgrösse wird an die verfügbare Breite angepasst. */
+@Composable
+private fun FitTitle(main: String, accent: String, modifier: Modifier) {
+    val text = buildAnnotatedString {
+        append(main.uppercase())
+        withStyle(SpanStyle(color = A.blue)) { append(accent.uppercase()) }
+    }
+    val measurer = rememberTextMeasurer()
+    val base = TextStyle(fontFamily = Syne, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, letterSpacing = (-0.3).sp, color = A.fg)
+    BoxWithConstraints(modifier) {
+        val density = LocalDensity.current
+        val avail = with(density) { maxWidth.toPx() }
+        val measured = remember(text, avail) { measurer.measure(text, base, softWrap = false, maxLines = 1).size.width.toFloat() }
+        val scale = if (measured > 0f) (avail / measured * 0.97f).coerceAtMost(1f) else 1f
+        Text(text, style = base.copy(fontSize = (30f * scale).sp), maxLines = 1, softWrap = false)
     }
 }
 

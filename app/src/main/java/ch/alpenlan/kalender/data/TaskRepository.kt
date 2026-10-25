@@ -71,7 +71,8 @@ class TaskRepository(private val ctx: Context) {
                         val millis = c.getLong(6)
                         val allDay = !c.isNull(7) && c.getInt(7) == 1
                         if (allDay) {
-                            dueDate = Dates.utcDate(millis)
+                            // Laut OpenTasks UTC-Mitternacht; manche Apps speichern lokale Mitternacht.
+                            dueDate = if (millis % 86_400_000L == 0L) Dates.utcDate(millis) else Dates.localDate(millis)
                         } else {
                             val zone = c.getString(8)?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: Dates.zone
                             val z = Instant.ofEpochMilli(millis).atZone(zone).withZoneSameInstant(Dates.zone)

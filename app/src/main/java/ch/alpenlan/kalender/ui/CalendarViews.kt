@@ -84,6 +84,44 @@ private val DAY_ALL_DAY_ROW = 20.dp
 
 // ------------------------------------------------------------------ Monat
 
+private val MONTH_LANE = 15.dp
+private val MONTH_TOP = 22.dp
+
+/** Ein Balken im Monatsraster: Spalten a..b einer Wochenzeile, auf Spur [lane]. */
+private class MonthBar(val a: Int, val b: Int, val event: EventItem?, val task: TaskItem?, var lane: Int = 0)
+
+/** Ordnet Termine und Aufgaben einer Woche Spuren zu – mehrtägige Termine laufen als durchgehender Balken. */
+private fun monthRowLayout(s: UiState, rowStart: LocalDate): List<MonthBar> {
+    val rowEnd = rowStart.plusDays(6)
+    val col = { d: LocalDate -> ChronoUnit.DAYS.between(rowStart, d).toInt().coerceIn(0, 6) }
+    val inRow = s.visibleEvents.filter { !it.endDay.isBefore(rowStart) && !it.startDay.isAfter(rowEnd) }
+    val bars = mutableListOf<MonthBar>()
+    inRow.filter { it.multiDay }
+        .sortedWith(compareBy<EventItem>({ maxOf(it.startDay, rowStart) }, { -ChronoUnit.DAYS.between(it.startDay, it.endDay) }, { it.title }))
+        .forEach { bars += MonthBar(col(it.startDay), col(it.endDay), it, null) }
+    for (c in 0 until 7) {
+        val d = rowStart.plusDays(c.toLong())
+        inRow.filter { !it.multiDay && it.startDay == d }
+            .sortedWith(compareBy<EventItem>({ if (it.allDay) 0 else 1 }, { it.startMin }, { it.title }))
+            .forEach { bars += MonthBar(c, c, it, null) }
+        s.calendarTasks.filter { it.due == d }
+            .sortedWith(compareBy({ it.done }, { !it.highPriority }, { it.title }))
+            .forEach { bars += MonthBar(c, c, null, it) }
+    }
+    val occupied = mutableListOf<BooleanArray>()
+    bars.forEach { bar ->
+        var l = 0
+        while (true) {
+            if (l == occupied.size) occupied += BooleanArray(7)
+            if ((bar.a..bar.b).none { occupied[l][it] }) break
+            l++
+        }
+        (bar.a..bar.b).forEach { occupied[l][it] = true }
+        bar.lane = l
+    }
+    return bars
+}
+
 @Composable
 fun MonthView(s: UiState, vm: AppViewModel) {
     val first = s.settings.firstDayOfWeek
@@ -92,9 +130,6 @@ fun MonthView(s: UiState, vm: AppViewModel) {
     val gridStart = Dates.weekStart(monthStart, first)
     val lead = ChronoUnit.DAYS.between(gridStart, monthStart).toInt()
     val rows = ceil((lead + s.month.lengthOfMonth()) / 7.0).toInt()
-    val gridEnd = gridStart.plusDays(rows * 7L - 1)
-    val evByDay = remember(s.visibleEvents, gridStart, rows) { eventsByDay(s, gridStart, gridEnd) }
-    val tByDay = remember(s.calendarTasks) { tasksByDay(s) }
     val kwW = if (s.settings.showWeekNumbers) 22.dp else 0.dp
 
     Column(
@@ -115,7 +150,7 @@ fun MonthView(s: UiState, vm: AppViewModel) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val gap = 3.dp
             val rowH = (maxHeight - gap * (rows - 1)) / rows
-            val maxItems = floor(((rowH - 22.dp) / 15.dp)).toInt().coerceAtLeast(1)
+            val maxLanes = floor(((rowH - MONTH_TOP - 3.dp) / MONTH_LANE)).toInt().coerceAtLeast(1)
             Column(verticalArrangement = Arrangement.spacedBy(gap)) {
                 for (r in 0 until rows) {
                     val rowStart = gridStart.plusDays(r * 7L)
@@ -126,16 +161,7 @@ fun MonthView(s: UiState, vm: AppViewModel) {
                                 textAlign = TextAlign.Center, style = MonoLabel.copy(fontSize = 10.sp, letterSpacing = 0.sp, color = A.dim),
                             )
                         }
-                        for (c in 0 until 7) {
-                            val d = rowStart.plusDays(c.toLong())
-                            DayCell(
-                                s = s, vm = vm, d = d, col = c,
-                                inMonth = d.month == s.month.month,
-                                events = evByDay[d].orEmpty(), tasks = tByDay[d].orEmpty().filter { !it.done || s.settings.doneTasksInCalendar },
-                                maxItems = maxItems,
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
-                            )
-                        }
+                        MonthRow(s, vm, rowStart, gap, maxLanes, Modifier.weight(1f).fillMaxHeight())
                     }
                 }
             }
@@ -144,25 +170,86 @@ fun MonthView(s: UiState, vm: AppViewModel) {
 }
 
 @Composable
-private fun DayCell(
-    s: UiState, vm: AppViewModel, d: LocalDate, col: Int, inMonth: Boolean,
-    events: List<EventItem>, tasks: List<TaskItem>, maxItems: Int, modifier: Modifier,
-) {
+private fun MonthRow(s: UiState, vm: AppViewModel, rowStart: LocalDate, gap: Dp, maxLanes: Int, modifier: Modifier) {
+    val bars = remember(s.visibleEvents, s.calendarTasks, rowStart) { monthRowLayout(s, rowStart) }
+    val overflow = bars.any { it.lane >= maxLanes }
+    val visibleLanes = if (overflow) (maxLanes - 1).coerceAtLeast(0) else maxLanes
+    val hidden = IntArray(7)
+    bars.filter { it.lane >= visibleLanes }.forEach { b -> (b.a..b.b).forEach { hidden[it]++ } }
+    val counts = IntArray(7)
+    bars.forEach { b -> (b.a..b.b).forEach { counts[it]++ } }
+
+    BoxWithConstraints(modifier) {
+        val colW = (maxWidth - gap * 6) / 7
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            for (c in 0 until 7) {
+                val d = rowStart.plusDays(c.toLong())
+                DayCellBg(s, vm, d, d.month == s.month.month, counts[c], Modifier.weight(1f).fillMaxHeight())
+            }
+        }
+        bars.filter { it.lane < visibleLanes }.forEach { bar ->
+            val x = (colW + gap) * bar.a + 2.dp
+            val w = (colW + gap) * (bar.b - bar.a + 1) - gap - 4.dp
+            val y = MONTH_TOP + MONTH_LANE * bar.lane
+            val allOut = (bar.a..bar.b).all { rowStart.plusDays(it.toLong()).month != s.month.month }
+            val alpha = if (allOut) 0.5f else 1f
+            val m = Modifier.offset(x = x, y = y).width(w).height(MONTH_LANE - 1.dp)
+            val e = bar.event
+            val t = bar.task
+            if (e != null) {
+                val rowEnd = rowStart.plusDays(6)
+                val l = if (e.startDay.isBefore(rowStart)) 0.dp else 4.dp
+                val rr = if (e.endDay.isAfter(rowEnd)) 0.dp else 4.dp
+                val shape = RoundedCornerShape(topStart = l, bottomStart = l, topEnd = rr, bottomEnd = rr)
+                Box(
+                    m.clip(shape).background(chipColor(e.color).copy(alpha = alpha)).padding(horizontal = 4.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        e.title, color = Color.White.copy(alpha = if (allOut) 0.7f else 1f),
+                        fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Clip,
+                    )
+                }
+            } else if (t != null) {
+                val lc = dotColor(s.listColor(t.listId))
+                Row(
+                    m.clip(RoundedCornerShape(4.dp)).border(1.dp, lc.copy(alpha = alpha), RoundedCornerShape(4.dp)).padding(horizontal = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).then(if (t.done) Modifier.background(lc) else Modifier.border(1.5.dp, lc, CircleShape)))
+                    Text(
+                        t.title, color = if (t.done) A.dim else A.fg.copy(alpha = alpha), fontSize = 9.sp, lineHeight = 11.sp,
+                        fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Clip,
+                        textDecoration = if (t.done) TextDecoration.LineThrough else null,
+                    )
+                }
+            }
+        }
+        for (c in 0 until 7) {
+            if (hidden[c] > 0) {
+                Text(
+                    "+${hidden[c]}", color = A.muted, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.offset(x = (colW + gap) * c + 5.dp, y = MONTH_TOP + MONTH_LANE * visibleLanes),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayCellBg(s: UiState, vm: AppViewModel, d: LocalDate, inMonth: Boolean, count: Int, modifier: Modifier) {
     val isSel = d == s.selected
     val isToday = d == s.today
-    val total = events.size + tasks.size
-    val limit = if (total > maxItems) (maxItems - 1).coerceAtLeast(0) else maxItems
     val shape = RoundedCornerShape(8.dp)
-    val alpha = if (inMonth) 1f else 0.5f
-    Column(
+    Box(
         modifier
             .clip(shape)
             .background(if (isSel) A.blue.copy(alpha = 0.12f) else if (inMonth) A.panel else A.panel.copy(alpha = 0.45f))
             .border(1.5.dp, if (isSel) A.blue else if (inMonth) Color(0xFF172235) else Color.Transparent, shape)
             .clickable(onClickLabel = "Tagesübersicht öffnen") { vm.select(d, openDaySheet = true) }
-            .semantics { contentDescription = "${d.dayOfMonth}. ${Dates.MONTHS[d.monthValue - 1]}, ${events.size} Termine, ${tasks.size} Aufgaben" }
+            .semantics { contentDescription = "${d.dayOfMonth}. ${Dates.MONTHS[d.monthValue - 1]}, $count Einträge" }
             .padding(3.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Box(
             Modifier
@@ -174,56 +261,6 @@ private fun DayCell(
                 fontWeight = if (isToday || isSel) FontWeight.Bold else FontWeight.SemiBold,
                 color = when { isToday -> A.blueInk; isSel -> A.blueLight; inMonth -> A.fg; else -> A.dim },
             )
-        }
-        var shown = 0
-        for (e in events) {
-            if (shown >= limit) break
-            val cont = e.startDay.isBefore(d) && col != 0
-            val next = e.endDay.isAfter(d) && col != 6
-            val shapeE = RoundedCornerShape(
-                topStart = if (cont) 0.dp else 4.dp, bottomStart = if (cont) 0.dp else 4.dp,
-                topEnd = if (next) 0.dp else 4.dp, bottomEnd = if (next) 0.dp else 4.dp,
-            )
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(14.dp)
-                    .clip(shapeE)
-                    .background(chipColor(e.color).copy(alpha = alpha))
-                    .padding(horizontal = 3.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Text(
-                    if (cont) "" else e.title, color = Color.White.copy(alpha = if (inMonth) 1f else 0.7f),
-                    fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Clip,
-                )
-            }
-            shown++
-        }
-        for (t in tasks) {
-            if (shown >= limit) break
-            val lc = dotColor(s.listColor(t.listId))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(14.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .border(1.dp, lc.copy(alpha = alpha), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Box(Modifier.size(6.dp).clip(CircleShape).then(if (t.done) Modifier.background(lc) else Modifier.border(1.5.dp, lc, CircleShape)))
-                Text(
-                    t.title, color = if (t.done) A.dim else A.fg.copy(alpha = alpha), fontSize = 9.sp, lineHeight = 11.sp,
-                    fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Clip,
-                    textDecoration = if (t.done) TextDecoration.LineThrough else null,
-                )
-            }
-            shown++
-        }
-        if (total > shown) {
-            Text("+${total - shown}", color = A.muted, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 2.dp))
         }
     }
 }
