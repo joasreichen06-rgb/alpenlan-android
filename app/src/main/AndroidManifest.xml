@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -22,6 +23,11 @@
         <package android:name="at.bitfire.davdroid" />
         <package android:name="org.dmfs.tasks" />
         <package android:name="org.tasks" />
+        <package android:name="net.thunderbird.android" />
+        <package android:name="net.thunderbird.android.beta" />
+        <package android:name="com.fsck.k9" />
+        <package android:name="com.nextcloud.client" />
+        <package android:name="org.jellyfin.mobile" />
         <provider android:authorities="org.dmfs.tasks" />
         <provider android:authorities="org.tasks.opentasks" />
         <intent>
@@ -51,6 +57,27 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="vnd.android.cursor.item/event" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".home.HomeActivity"
+            android:exported="true"
+            android:label="@string/home_name"
+            android:icon="@mipmap/ic_home"
+            android:roundIcon="@mipmap/ic_home"
+            android:taskAffinity="ch.alpenlan.home"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Rückkehr vom Authentik-Login -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ch.alpenlan.app" android:path="/oauth2redirect" />
             </intent-filter>
         </activity>
 

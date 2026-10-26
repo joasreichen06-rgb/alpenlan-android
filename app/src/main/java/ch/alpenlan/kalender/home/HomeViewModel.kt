@@ -1,0 +1,172 @@
+package ch.alpenlan.kalender.home
+
+import android.app.Application
+import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import ch.alpenlan.kalender.data.CalendarRepository
+import ch.alpenlan.kalender.data.EventItem
+import ch.alpenlan.kalender.data.SettingsStore
+import ch.alpenlan.kalender.data.TaskRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
+
+enum class HomeTab(val label: String) { OVERVIEW("Übersicht"), ROOM("Zimmer"), SERVER("Server"), APPS("Apps") }
+
+data class HomeState(
+    val loggedIn: Boolean = false,
+    val busy: Boolean = false,
+    val user: String? = null,
+    val authError: String? = null,
+    val tab: HomeTab = HomeTab.OVERVIEW,
+    val model: ControlModel? = null,
+    val offline: String? = null,
+    val updatedAt: Long = 0,
+    val camera: ImageBitmap? = null,
+    val agenda: List<EventItem> = emptyList(),
+    val agendaToday: LocalDate = LocalDate.now(),
+    val openTasks: Int = 0,
+    val overdueTasks: Int = 0,
+    val toast: String? = null,
+    val toastStamp: Long = 0,
+    val openGuest: Int? = null,
+)
+
+class HomeViewModel(app: Application) : AndroidViewModel(app) {
+    private val auth = Auth(app)
+    private val api = ControlApi(auth)
+    private val cal = CalendarRepository(app)
+    private val tasks = TaskRepository(app)
+    private val store = SettingsStore(app)
+
+    private val _s = MutableStateFlow(HomeState(loggedIn = auth.loggedIn, user = auth.userName))
+    val state: StateFlow<HomeState> = _s
+
+    private var pollJob: Job? = null
+    private var camJob: Job? = null
+
+    fun login() = auth.loginIntent()
+
+    fun handleRedirect(uri: Uri) {
+        viewModelScope.launch {
+            _s.update { it.copy(busy = true, authError = null) }
+            runCatching { auth.handleRedirect(uri) }
+                .onSuccess { _s.update { it.copy(loggedIn = true, busy = false, user = auth.userName) }; setActive(true) }
+                .onFailure { e -> _s.update { it.copy(busy = false, authError = e.message ?: "Anmeldung fehlgeschlagen") } }
+        }
+    }
+
+    fun logout() {
+        auth.logout()
+        pollJob?.cancel(); camJob?.cancel()
+        _s.update { HomeState(loggedIn = false) }
+    }
+
+    fun setTab(t: HomeTab) {
+        _s.update { it.copy(tab = t) }
+        updateCamera()
+    }
+
+    fun toggleGuest(id: Int) = _s.update { it.copy(openGuest = if (it.openGuest == id) null else id) }
+
+    private fun toast(t: String) = _s.update { it.copy(toast = t, toastStamp = System.nanoTime()) }
+    fun dismissToast() = _s.update { it.copy(toast = null) }
+
+    /** Läuft nur, solange die App sichtbar ist. */
+    fun setActive(active: Boolean) {
+        pollJob?.cancel()
+        camJob?.cancel()
+        if (!active) return
+        loadLocal()
+        if (!_s.value.loggedIn) return
+        pollJob = viewModelScope.launch {
+            while (isActive) {
+                refresh()
+                delay(3000)
+            }
+        }
+        updateCamera()
+    }
+
+    private fun updateCamera() {
+        camJob?.cancel()
+        val s = _s.value
+        if (!s.loggedIn || s.tab != HomeTab.ROOM) return
+        camJob = viewModelScope.launch {
+            while (isActive) {
+                if (_s.value.model?.printer?.camera == true) {
+                    api.camera()?.let { bmp -> _s.update { it.copy(camera = bmp.asImageBitmap()) } }
+                }
+                delay(4000)
+            }
+        }
+    }
+
+    suspend fun refresh() {
+        try {
+            val m = api.state()
+            _s.update { it.copy(model = m, offline = null, updatedAt = System.currentTimeMillis()) }
+        } catch (e: AuthError) {
+            _s.update { it.copy(offline = e.message, loggedIn = auth.loggedIn) }
+            if (!auth.loggedIn) pollJob?.cancel()
+        } catch (e: Exception) {
+            _s.update { it.copy(offline = "Alpenlan Control nicht erreichbar") }
+        }
+    }
+
+    /** Termine der nächsten Tage und offene Aufgaben direkt vom Handy. */
+    private fun loadLocal() {
+        viewModelScope.launch {
+            val settings = runCatching { store.flow.first() }.getOrNull()
+            val today = LocalDate.now()
+            val (agenda, open, overdue) = withContext(Dispatchers.IO) {
+                val hidden = settings?.hiddenCalendars ?: emptySet()
+                val evs = runCatching { cal.instances(today, today.plusDays(2)) }.getOrDefault(emptyList())
+                    .filter { it.calendarId !in hidden }
+                    .sortedWith(compareBy({ it.startDay.isBefore(today) && !it.allDay }, { maxOf(it.startDay, today) }, { !it.allDay }, { it.startMin }))
+                val p = tasks.provider(settings?.taskProvider ?: "auto")
+                val t = if (p != null) runCatching { tasks.tasks(p) }.getOrDefault(emptyList()) else emptyList()
+                val openList = t.filter { !it.done && it.parentId == null && it.due != null && !it.due.isAfter(today) }
+                Triple(evs.take(6), openList.size, openList.count { it.due!!.isBefore(today) })
+            }
+            _s.update { it.copy(agenda = agenda, agendaToday = today, openTasks = open, overdueTasks = overdue) }
+        }
+    }
+
+    fun act(a: String, v: Any? = null, optimistic: ((ControlModel) -> ControlModel)? = null, msg: String? = null) {
+        val m = _s.value.model
+        if (m != null && optimistic != null) _s.update { it.copy(model = optimistic(m)) }
+        viewModelScope.launch {
+            val ok = runCatching { api.action(a, v) }.getOrElse { e ->
+                toast(if (e is AuthError) e.message ?: "Anmeldung nötig" else "Keine Verbindung zu Control"); return@launch
+            }
+            if (!ok) toast("Befehl wurde nicht ausgeführt") else if (msg != null) toast(msg)
+            delay(400)
+            refresh()
+        }
+    }
+
+    // ---------- bequeme Aktionen ----------
+    fun pcToggle() {
+        val on = _s.value.model?.pc?.online == true
+        if (on) act("pc_off", msg = "PC fährt herunter – Anlage schaltet mit aus")
+        else act("pc_on", optimistic = { it.copy(pc = it.pc.copy(booting = true)) }, msg = "PC wird gestartet – Anlage folgt")
+    }
+
+    fun volume(step: Int) {
+        val avr = _s.value.model?.avr ?: return
+        if (!avr.on) { toast("Anlage ist aus – Lautstärke schaltet sie nicht ein"); return }
+        act("vol_step", step, optimistic = { m -> m.copy(avr = m.avr.copy(volume = ((m.avr.volume ?: 0) + step).coerceIn(0, m.avr.max), muted = false)) })
+    }
+}
