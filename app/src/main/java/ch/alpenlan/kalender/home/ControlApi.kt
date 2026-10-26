@@ -3,6 +3,7 @@ package ch.alpenlan.kalender.home
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -143,7 +144,77 @@ class ControlApi(private val auth: Auth) {
         }
     }.getOrNull()
 
+    /**
+     * Live-Video (MJPEG) lesen und jedes Bild an [onFrame] geben. Läuft, bis die Verbindung
+     * abbricht oder die Coroutine beendet wird.
+     */
+    suspend fun stream(onFrame: suspend (Bitmap) -> Unit) {
+        val c = open("/app/v1/stream")
+        withContext(Dispatchers.IO) {
+            try {
+                if (c.responseCode != 200) throw Exception("Stream ${c.responseCode}")
+                val input = java.io.BufferedInputStream(c.inputStream, 65536)
+                val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 }
+                while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                    val jpeg = Mjpeg.nextFrame(input) ?: break
+                    BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, opts)?.let { onFrame(it) }
+                }
+            } finally { c.disconnect() }
+        }
+    }
+
     companion object {
         const val BASE = "https://control.alpenlan.com"
+    }
+}
+
+/** Liest einzelne JPEG-Bilder aus einem MJPEG-Strom (Content-Length oder JPEG-Marker). */
+object Mjpeg {
+    private fun readLine(i: java.io.InputStream): String? {
+        val sb = StringBuilder()
+        while (true) {
+            val b = i.read()
+            if (b < 0) return if (sb.isEmpty()) null else sb.toString()
+            if (b == '\n'.code) return sb.toString().trimEnd('\r')
+            sb.append(b.toChar())
+            if (sb.length > 4096) return sb.toString()
+        }
+    }
+
+    fun nextFrame(i: java.io.InputStream): ByteArray? {
+        var length = -1
+        var inHeaders = false
+        // Kopfzeilen des nächsten Teils lesen
+        while (true) {
+            val line = readLine(i) ?: return null
+            if (line.startsWith("--")) { inHeaders = true; continue }
+            if (line.contains(":")) {
+                inHeaders = true
+                val (k, v) = line.split(":", limit = 2)
+                if (k.trim().equals("Content-Length", true)) length = v.trim().toIntOrNull() ?: -1
+                continue
+            }
+            if (line.isEmpty() && inHeaders) break
+        }
+        if (length in 1..20_000_000) {
+            val buf = ByteArray(length)
+            var off = 0
+            while (off < length) {
+                val n = i.read(buf, off, length - off)
+                if (n < 0) return null
+                off += n
+            }
+            return buf
+        }
+        // Ohne Längenangabe: bis zum JPEG-Ende (FF D9) lesen
+        val out = java.io.ByteArrayOutputStream(65536)
+        var prev = -1
+        while (true) {
+            val b = i.read()
+            if (b < 0) return null
+            out.write(b)
+            if (prev == 0xFF && b == 0xD9) return out.toByteArray()
+            prev = b
+        }
     }
 }

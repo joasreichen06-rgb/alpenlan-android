@@ -34,6 +34,8 @@ data class HomeState(
     val offline: String? = null,
     val updatedAt: Long = 0,
     val camera: ImageBitmap? = null,
+    val cameraLive: Boolean = false,
+    val cameraFps: Double = 0.0,
     val agenda: List<EventItem> = emptyList(),
     val agendaToday: LocalDate = LocalDate.now(),
     val openTasks: Int = 0,
@@ -104,11 +106,28 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val s = _s.value
         if (!s.loggedIn || s.tab != HomeTab.ROOM) return
         camJob = viewModelScope.launch {
+            var lastFrame = 0L
             while (isActive) {
-                if (_s.value.model?.printer?.camera == true) {
-                    api.camera()?.let { bmp -> _s.update { it.copy(camera = bmp.asImageBitmap()) } }
+                if (_s.value.model?.printer?.camera != true) { delay(2000); continue }
+                // 1) Live-Video versuchen
+                val started = System.currentTimeMillis()
+                runCatching {
+                    api.stream { bmp ->
+                        val now = System.currentTimeMillis()
+                        val fps = if (lastFrame > 0) 1000.0 / (now - lastFrame).coerceAtLeast(1) else 0.0
+                        lastFrame = now
+                        _s.update { it.copy(camera = bmp.asImageBitmap(), cameraLive = true, cameraFps = (it.cameraFps * 0.8 + fps * 0.2)) }
+                    }
                 }
-                delay(4000)
+                if (!isActive) break
+                _s.update { it.copy(cameraLive = false) }
+                // Lief der Stream eine Weile, sofort neu verbinden; sonst 30 s Einzelbilder
+                if (System.currentTimeMillis() - started > 15_000) continue
+                val until = System.currentTimeMillis() + 30_000
+                while (isActive && System.currentTimeMillis() < until) {
+                    api.camera()?.let { bmp -> _s.update { it.copy(camera = bmp.asImageBitmap()) } }
+                    delay(1500)
+                }
             }
         }
     }

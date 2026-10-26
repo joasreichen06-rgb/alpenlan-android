@@ -37,6 +37,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -458,16 +463,7 @@ private fun Room(s: HomeState, vm: HomeViewModel) {
     val p = m.printer
     Card {
         CardHead("3D-Drucker", if (p.state == "printing") A.warn else if (p.state == "unavailable") GRAY else GREEN, printerState(p.state))
-        if (p.camera) {
-            val cam = s.camera
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(A.panel2).border(1.dp, A.line, RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (cam != null) Image(cam, contentDescription = "Kamerabild des Druckers", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                else Mono("Kamera lädt …", size = 11)
-            }
-        }
+        if (p.camera) CameraView(s)
         if (p.state == "printing" || p.state == "paused") {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(p.file.ifBlank { "Druck" }, color = A.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -634,5 +630,48 @@ private fun Apps(s: HomeState, vm: HomeViewModel) {
         }
         LinkButton("Abmelden", Modifier.fillMaxWidth()) { vm.logout() }
         Hint("Push-Benachrichtigungen (ntfy) und Widgets folgen in einer nächsten Version.")
+    }
+}
+
+// ------------------------------------------------------------------ Kamera
+
+@Composable
+private fun CameraView(s: HomeState) {
+    val cam = s.camera
+    var full by remember { mutableStateOf(false) }
+    val ratio = if (cam != null && cam.height > 0) cam.width.toFloat() / cam.height else 4f / 3f
+    Box(
+        Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(12.dp)).background(Color.Black)
+            .border(1.dp, A.line, RoundedCornerShape(12.dp))
+            .clickable(enabled = cam != null, role = Role.Button, onClickLabel = "Vollbild") { full = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (cam != null) Image(cam, contentDescription = "Kamerabild des Druckers", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        else Mono("Kamera lädt …", size = 11)
+        if (cam != null) CameraBadge(s, Modifier.align(Alignment.BottomEnd).padding(8.dp))
+    }
+    if (full && cam != null) {
+        Dialog(onDismissRequest = { full = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black).clickable(onClickLabel = "Schliessen") { full = false },
+                contentAlignment = Alignment.Center,
+            ) {
+                val c = s.camera ?: cam
+                Image(c, contentDescription = "Kamerabild des Druckers, Vollbild", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                CameraBadge(s, Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(16.dp))
+                Mono("Tippen zum Schliessen", size = 10, color = A.muted, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraBadge(s: HomeState, modifier: Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xB3000000)).padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(if (s.cameraLive) GREEN else A.warn))
+        Mono(if (s.cameraLive) "LIVE · ${s.cameraFps.roundToInt()} FPS" else "BILD", size = 10, spacing = 0.8, color = Color.White)
     }
 }
