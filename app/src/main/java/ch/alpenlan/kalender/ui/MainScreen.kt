@@ -161,9 +161,16 @@ private fun Header(s: UiState, vm: AppViewModel) {
 /** Titel, der immer ganz sichtbar ist: Schriftgrösse wird an die verfügbare Breite angepasst. */
 @Composable
 private fun FitTitle(main: String, accent: String, modifier: Modifier) {
+    // Syne-Ziffern werden auf manchen Geräten oben abgeschnitten – Zahlen deshalb in Manrope.
+    val digits = SpanStyle(fontFamily = Manrope, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
+    fun androidx.compose.ui.text.AnnotatedString.Builder.part(t: String) {
+        Regex("\\d+|\\D+").findAll(t).forEach { m ->
+            if (m.value[0].isDigit()) withStyle(digits) { append(m.value) } else append(m.value)
+        }
+    }
     val text = buildAnnotatedString {
-        append(main.uppercase())
-        withStyle(SpanStyle(color = A.blue)) { append(accent.uppercase()) }
+        part(main.uppercase())
+        withStyle(SpanStyle(color = A.blue)) { part(accent.uppercase()) }
     }
     val measurer = rememberTextMeasurer()
     val base = TextStyle(fontFamily = Syne, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, letterSpacing = (-0.3).sp, color = A.fg)

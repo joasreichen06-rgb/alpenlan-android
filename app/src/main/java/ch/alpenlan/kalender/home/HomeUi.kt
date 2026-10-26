@@ -440,7 +440,8 @@ private fun Room(s: HomeState, vm: HomeViewModel) {
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     if (!m.avr.on) "AUS" else if (m.avr.muted) "—" else "${m.avr.volume ?: "–"}",
-                    fontFamily = Syne, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp, color = if (m.avr.on) A.fg else GRAY,
+                    fontFamily = if (m.avr.on && !m.avr.muted) ch.alpenlan.kalender.ui.Manrope else Syne,
+                    fontWeight = if (m.avr.on && !m.avr.muted) FontWeight.Bold else FontWeight.ExtraBold, fontSize = 40.sp, color = if (m.avr.on) A.fg else GRAY,
                 )
                 Mono(if (m.avr.on) "Lautstärke · max ${m.avr.max}" else "Drehen schaltet nicht ein", size = 10, spacing = 1.0)
             }
