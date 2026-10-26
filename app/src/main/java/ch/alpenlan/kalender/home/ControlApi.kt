@@ -104,20 +104,20 @@ class ControlApi(private val auth: Auth) {
             val code = withContext(Dispatchers.IO) { c.responseCode }
             val type = c.contentType ?: ""
             // Authentik leitet ohne gültigen Schlüssel auf die Login-Seite um
-            if (code == 401 || code == 403 || code in 300..399 || (code == 200 && path.startsWith("/api/state") && !type.contains("json"))) {
+            if (code == 401 || code == 403 || code in 300..399 || (code == 200 && path.startsWith("/app/v1/state") && !type.contains("json"))) {
                 c.disconnect()
                 if (!retried) {
                     auth.accessToken(forceRefresh = true)
                     return open(path, method, body, retried = true)
                 }
-                throw AuthError("Control lehnt die Anmeldung ab ($code). In Authentik beim Provider „Alpenlan Control“ die App unter „Federated OIDC Providers“ eintragen.")
+                throw AuthError(if (code in 300..399) "Control-Zugang für die App ist im Proxy noch gesperrt ($code)." else "Control lehnt die Anmeldung ab ($code) – bitte ab- und wieder anmelden.")
             }
             c
         }
     }
 
     suspend fun state(): ControlModel {
-        val c = open("/api/state")
+        val c = open("/app/v1/state")
         return withContext(Dispatchers.IO) {
             try {
                 if (c.responseCode !in 200..299) throw Exception("Control antwortet mit ${c.responseCode}")
@@ -128,7 +128,7 @@ class ControlApi(private val auth: Auth) {
 
     suspend fun action(a: String, v: Any? = null): Boolean {
         val body = JSONObject().put("a", a).put("src", "App").apply { if (v != null) put("v", v) }.toString()
-        val c = open("/api/action", "POST", body)
+        val c = open("/app/v1/action", "POST", body)
         return withContext(Dispatchers.IO) {
             try {
                 c.responseCode in 200..299 && JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optBoolean("ok")
@@ -137,7 +137,7 @@ class ControlApi(private val auth: Auth) {
     }
 
     suspend fun camera(): Bitmap? = runCatching {
-        val c = open("/api/camera?t=${System.currentTimeMillis()}")
+        val c = open("/app/v1/camera?t=${System.currentTimeMillis()}")
         withContext(Dispatchers.IO) {
             try { if (c.responseCode == 200) c.inputStream.use { BitmapFactory.decodeStream(it) } else null } finally { c.disconnect() }
         }
