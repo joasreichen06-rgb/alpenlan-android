@@ -341,15 +341,17 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
             }
         }
         Box {
+            val compact = p.dials.count { it.label.isNotEmpty() } > 2
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 p.dials.forEachIndexed { i, d ->
+                    if (d.label.isEmpty()) return@forEachIndexed
                     val key = "${p.id}:$i"
                     val mode = modes[key] ?: 0
                     val f = faceOf(d, mode, m)
                     val rot = if (mode == 1 && d.altRotate != null) d.altRotate else d.rotate
                     DeckSlider(
                         f, if (d.press == "mode") (if (mode == 1) "2/2" else "1/2") else "", hintOf(d), overlay == i, STEP_DP[rot] ?: 10f,
-                        Modifier.weight(1f), page,
+                        Modifier.weight(1f), page, compact,
                         onStep = { dir -> if (f.active || rot == "vol_step") { perform(rot, dir); showOverlay(i) } },
                         onTap = {
                             when (d.press) {
@@ -364,7 +366,8 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
             }
             val oi = overlay
             if (oi != null) {
-                Box(Modifier.offset(y = (-82).dp)) { DeckOverlay(faceOf(p.dials[oi], modes["${p.id}:$oi"] ?: 0, m)) }
+                // liegt genau über den Feldern; Berührungen gehen weiter an das Feld darunter
+                Box(Modifier.matchParentSize()) { DeckOverlay(faceOf(p.dials[oi], modes["${p.id}:$oi"] ?: 0, m)) }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
@@ -436,10 +439,10 @@ private fun DeckTile(
             .padding(6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(24.dp))
-            if (look.label.isNotEmpty()) Text(look.label, color = fg, fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (look.status.isNotEmpty()) Text(look.status, style = MonoLabel.copy(fontSize = 8.5.sp, letterSpacing = 0.sp, color = fg.copy(alpha = 0.8f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
+            if (look.label.isNotEmpty()) Text(look.label, color = fg, fontSize = fs(11.5f), lineHeight = fs(13f), fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (look.status.isNotEmpty()) Text(look.status, style = MonoLabel.copy(fontSize = fs(8.5f), lineHeight = fs(10f), letterSpacing = 0.sp, color = fg.copy(alpha = 0.8f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (hasHold) {
             Box(
@@ -452,7 +455,7 @@ private fun DeckTile(
 
 @Composable
 private fun DeckSlider(
-    f: Face, modeTag: String, hint: String, active: Boolean, stepDp: Float, modifier: Modifier, page: Int,
+    f: Face, modeTag: String, hint: String, active: Boolean, stepDp: Float, modifier: Modifier, page: Int, compact: Boolean,
     onStep: (Int) -> Unit, onTap: () -> Unit, onHold: () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -512,15 +515,15 @@ private fun DeckSlider(
         }
         Column(Modifier.fillMaxSize().padding(9.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(f.label.ifEmpty { "—" }.uppercase(), style = MonoLabel.copy(fontSize = 8.5.sp, letterSpacing = 0.8.sp, color = if (f.muted) DC.mutedLabel else Color(0xFF7D8BA3)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (modeTag.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Text(modeTag, style = MonoLabel.copy(fontSize = 8.sp, letterSpacing = 0.sp, color = A.blueLight)) }
+                Text(f.label.ifEmpty { "—" }.uppercase(), style = MonoLabel.copy(fontSize = fs(if (compact) 8f else 9f), letterSpacing = 0.6.sp, color = if (f.muted) DC.mutedLabel else Color(0xFF7D8BA3)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (modeTag.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Text(modeTag, style = MonoLabel.copy(fontSize = fs(8f), letterSpacing = 0.sp, color = A.blueLight)) }
             }
             Text(
                 if (f.muted) f.value.uppercase() else f.value,
                 color = if (f.muted) DC.mutedText else if (f.active) A.fg else A.dim,
-                fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                fontSize = fs(if (compact) 13.5f else 18f), fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
-            Text(hint, style = MonoLabel.copy(fontSize = 8.sp, letterSpacing = 0.sp, color = Color(0xFF6F7C92)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(hint, style = MonoLabel.copy(fontSize = fs(if (compact) 7.5f else 8.5f), letterSpacing = 0.sp, color = Color(0xFF6F7C92)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -529,17 +532,17 @@ private fun DeckSlider(
 private fun DeckOverlay(f: Face) {
     val icon = deckIcon(f.icon.ifEmpty { "gauge" })
     Row(
-        Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(14.dp))
+        Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp))
             .background(if (f.muted) Brush.horizontalGradient(listOf(Color(0xFF3A1118), DC.mutedBg)) else SolidColor(Color(0xFF0D1626)))
             .border(1.dp, Color(0xFF2B3B55), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = if (f.muted) Color(0xFFFF5D68) else A.blue, modifier = Modifier.size(24.dp))
         Column {
-            Text(f.label.uppercase(), style = MonoLabel.copy(fontSize = 9.5.sp, letterSpacing = 1.2.sp, color = if (f.muted) DC.mutedLabel else Color(0xFF7D8BA3)))
-            Text(if (f.muted) f.value.uppercase() else f.value, color = if (f.muted) DC.mutedText else A.fg, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+            Text(f.label.uppercase(), style = MonoLabel.copy(fontSize = fs(9.5f), letterSpacing = 1.2.sp, color = if (f.muted) DC.mutedLabel else Color(0xFF7D8BA3)))
+            Text(if (f.muted) f.value.uppercase() else f.value, color = if (f.muted) DC.mutedText else A.fg, fontSize = fs(24f), fontWeight = FontWeight.ExtraBold, maxLines = 1)
         }
-        if (f.sub.isNotEmpty()) Text(f.sub, style = MonoLabel.copy(fontSize = 10.sp, letterSpacing = 0.sp, color = DC.mutedLabel), maxLines = 1)
+        if (f.sub.isNotEmpty()) Text(f.sub, style = MonoLabel.copy(fontSize = fs(10f), letterSpacing = 0.sp, color = DC.mutedLabel), maxLines = 1)
         Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF1A2438))) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(f.bar.coerceIn(0f, 1f)).background(if (f.muted) Color(0xFF6B2A33) else A.blue))
         }
@@ -589,3 +592,7 @@ private fun openUrl(ctx: android.content.Context, url: String) {
         ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
+
+/** Schriftgrösse wie auf einem Gerätedisplay: grössere System-Schrift soll das Deck nicht sprengen. */
+@Composable
+private fun fs(v: Float) = (v / LocalDensity.current.fontScale.coerceAtLeast(1f)).sp
