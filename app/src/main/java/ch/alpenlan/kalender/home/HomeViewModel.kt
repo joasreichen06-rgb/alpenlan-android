@@ -85,6 +85,32 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private fun toast(t: String) = _s.update { it.copy(toast = t, toastStamp = System.nanoTime()) }
     fun info(t: String) = toast(t)
 
+    // Lautstärke beim Ziehen: sofort anzeigen, Änderungen gebündelt senden (höchstens ~10× pro Sekunde)
+    private var volSent: Int? = null
+    private var volWant: Int? = null
+    private var volJob: Job? = null
+    fun volumeTo(v: Int) {
+        val avr = _s.value.model?.avr ?: return
+        if (!avr.on) return
+        if (volSent == null) volSent = avr.volume ?: v
+        volWant = v
+        _s.update { s -> s.copy(model = s.model?.let { m -> m.copy(avr = m.avr.copy(volume = v, muted = false)) }) }
+        if (volJob?.isActive == true) return
+        volJob = viewModelScope.launch {
+            while (true) {
+                val want = volWant ?: break
+                val d = want - (volSent ?: want)
+                if (d == 0) break
+                runCatching { api.action("vol_step", d) }
+                volSent = want
+                delay(100)
+            }
+            delay(900)
+            volSent = null
+            refresh()
+        }
+    }
+
     // Feineinstellungen am Drucker: sofort anzeigen, gesammelt senden
     private val tunePending = HashMap<String, Int>()
     private var tuneJob: Job? = null

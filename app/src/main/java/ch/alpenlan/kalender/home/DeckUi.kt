@@ -82,28 +82,23 @@ private val NONE_D = DDial("", "")
 private val PAGES = listOf(
     DPage("home", "Home", listOf(
         DKey("PC", "power", "pc_toggle", kind = "pc"), DKey("Licht", "light", "licht", kind = "licht"),
-        DKey("Drucker", "printer", "page:drucker", kind = "printer"), DKey("Apps", "grid", "tab:apps"),
         DKey("Quellen", "disc", "input_step", kind = "avr"), DKey("Licht +", "palette", "licht", kind = "licht"),
-        NONE_K, DKey("Server", "server", "tab:server", kind = "server"),
     ), listOf(
         DDial("Lautstärke", "speaker", "vol_step", "mute", "mute", big = true),
         DDial("Helligkeit", "light", "licht", "mode", "page:licht", altLabel = "Farbtemp.", altRotate = "licht"),
-        NONE_D, NONE_D,
     )),
     DPage("licht", "Licht", listOf(
         DKey("Licht", "light", "licht", kind = "licht"), DKey("Hell", "light", "licht", kind = "licht"),
         DKey("Gemütlich", "light", "licht", kind = "licht"), DKey("Film", "film", "licht", kind = "licht"),
-        DKey("Farbe", "palette", "licht", kind = "licht"), NONE_K,
-        DKey("Alles aus", "power", "licht", kind = "licht"), DKey("Zurück", "back", "page:home", kind = "back"),
+        DKey("Farbe", "palette", "licht", kind = "licht"), DKey("Alles aus", "power", "licht", kind = "licht"),
     ), listOf(
         DDial("Helligkeit", "light", "licht", "mode", "licht", altLabel = "Farbtemp.", altRotate = "licht"),
-        DDial("Weiss", "light", "licht"), DDial("Farbe", "palette", "licht"), NONE_D,
+        DDial("Weiss", "light", "licht"), DDial("Farbe", "palette", "licht"),
     )),
     DPage("drucker", "Drucker", listOf(
-        DKey("Status", "printer", "", kind = "printer"), DKey("Temp", "temp", "", kind = "temp"),
-        DKey("Bewegen", "grid", "info:Achsen bewegen kommt zusammen mit dem Stream Deck"), DKey("Kamera", "camera", "camera", kind = "camera"),
         DKey("Pause", "pause", "prn_pause", "prn_cancel", kind = "pause"), DKey("Abbrechen", "stop", "prn_cancel", kind = "cancel"),
-        DKey("Mainsail", "globe", "mainsail"), DKey("Zurück", "back", "page:home", kind = "back"),
+        DKey("Temp", "temp", "", kind = "temp"), DKey("Kamera", "camera", "camera", kind = "camera"),
+        DKey("Bewegen", "grid", "info:Achsen bewegen kommt zusammen mit dem Stream Deck"), DKey("Mainsail", "globe", "mainsail"),
     ), listOf(
         DDial("Tempo", "gauge", "prn_speed"), DDial("Fluss", "layers", "prn_flow"),
         DDial("Lüfter", "fan", "prn_fan"), DDial("Z-Offset", "gauge", "prn_zoff"),
@@ -195,8 +190,8 @@ private fun lookOf(k: DKey, m: ControlModel, armed: Boolean): KeyLook {
             else -> KeyLook(DC.black, k.label, "offline")
         }
         "pause" -> when {
-            printing -> KeyLook(DC.blue, "Pause", "halten: abbrechen")
-            paused -> KeyLook(DC.green, "Weiter", "halten: abbrechen")
+            printing -> KeyLook(DC.blue, "Pause", "$pct · druckt")
+            paused -> KeyLook(DC.green, "Weiter", "$pct · pausiert")
             else -> KeyLook(DC.black, "–", "kein Druck", false)
         }
         "cancel" -> if (printing || paused) KeyLook(DC.red, k.label, "2× drücken") else KeyLook(DC.black, k.label, "kein Druck", false)
@@ -259,6 +254,11 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
     var armed by remember { mutableStateOf<String?>(null) }
     val camFull = remember { mutableStateOf(false) }
     val p = PAGES[page.coerceIn(0, PAGES.lastIndex)]
+    // Während des Ziehens zeigt die App den eigenen Wert, bis Control nachgezogen hat
+    var volOverride by remember { mutableStateOf<Int?>(null) }
+    var volStamp by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(volStamp) { if (volOverride != null) { delay(1500); volOverride = null } }
+    val mv = volOverride?.let { m.copy(avr = m.avr.copy(volume = it, muted = false)) } ?: m
 
     LaunchedEffect(overlayStamp) { if (overlay != null) { delay(1800); overlay = null } }
     LaunchedEffect(armed) { if (armed != null) { delay(2500); armed = null } }
@@ -278,7 +278,11 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
             a == "input_step" -> vm.act("input_step", dir, optimistic = { it.copy(avr = it.avr.copy(on = true)) },
                 msg = if (!m.avr.on) "Anlage ein" else null)
             a == "mute" -> if (m.avr.on) vm.act("mute", optimistic = { it.copy(avr = it.avr.copy(muted = !it.avr.muted)) }) else vm.info("Anlage ist aus")
-            a == "vol_step" -> vm.volume(dir)
+            a == "vol_step" -> if (!m.avr.on) vm.info("Anlage ist aus – Lautstärke schaltet sie nicht ein") else {
+                val nv = ((volOverride ?: m.avr.volume ?: 0) + dir).coerceIn(0, m.avr.max)
+                volOverride = nv; volStamp = System.nanoTime()
+                vm.volumeTo(nv)
+            }
             a == "prn_pause" -> when (m.printer.state) {
                 "printing" -> vm.act("prn_pause", msg = "Druck pausiert")
                 "paused" -> vm.act("prn_resume", msg = "Druck läuft weiter")
@@ -327,17 +331,17 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
             .border(1.dp, Color(0xFF1C2738), RoundedCornerShape(22.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        for (row in 0..1) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (col in 0..3) {
-                    val i = row * 4 + col
+        val cols = if (p.keys.size <= 4) 2 else 3
+        p.keys.indices.chunked(cols).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { i ->
                     val k = p.keys[i]
                     DeckTile(
-                        k, lookOf(k, m, armed == "${p.id}:$i"), Modifier.weight(1f), page,
+                        k, lookOf(k, m, armed == "${p.id}:$i"), Modifier.weight(1f), page, cols,
                         onTap = { fireKey(i, false) }, onHold = { fireKey(i, true) },
-                        onSwipe = { next -> goPage(page + if (next) 1 else -1) },
                     )
                 }
+                repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
         Box {
@@ -347,7 +351,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
                     if (d.label.isEmpty()) return@forEachIndexed
                     val key = "${p.id}:$i"
                     val mode = modes[key] ?: 0
-                    val f = faceOf(d, mode, m)
+                    val f = faceOf(d, mode, mv)
                     val rot = if (mode == 1 && d.altRotate != null) d.altRotate else d.rotate
                     DeckSlider(
                         f, if (d.press == "mode") (if (mode == 1) "2/2" else "1/2") else "", hintOf(d), overlay == i, STEP_DP[rot] ?: 10f,
@@ -367,12 +371,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
             val oi = overlay
             if (oi != null) {
                 // liegt genau über den Feldern; Berührungen gehen weiter an das Feld darunter
-                Box(Modifier.matchParentSize()) { DeckOverlay(faceOf(p.dials[oi], modes["${p.id}:$oi"] ?: 0, m)) }
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            PAGES.indices.forEach { j ->
-                Box(Modifier.padding(horizontal = 3.dp).size(6.dp).clip(CircleShape).background(if (j == page) A.blue else Color(0xFF2A3346)))
+                Box(Modifier.matchParentSize()) { DeckOverlay(faceOf(p.dials[oi], modes["${p.id}:$oi"] ?: 0, mv)) }
             }
         }
     }
@@ -392,25 +391,24 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
 
 @Composable
 private fun DeckTile(
-    k: DKey, look: KeyLook, modifier: Modifier, page: Int,
-    onTap: () -> Unit, onHold: () -> Unit, onSwipe: (next: Boolean) -> Unit,
+    k: DKey, look: KeyLook, modifier: Modifier, page: Int, cols: Int,
+    onTap: () -> Unit, onHold: () -> Unit,
 ) {
+    val big = cols == 2
     val density = LocalDensity.current
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (pressed) 0.95f else 1f, label = "press")
     val tap by rememberUpdatedState(onTap)
     val hold by rememberUpdatedState(onHold)
-    val swipe by rememberUpdatedState(onSwipe)
     val hasHold = k.hold.isNotEmpty()
     val icon = deckIcon(k.icon)
     val (bg, fg) = look.colors
     Box(
-        modifier.aspectRatio(1f).scale(scale).clip(RoundedCornerShape(16.dp)).background(bg)
-            .border(1.dp, Color(0xFF232A38), RoundedCornerShape(16.dp))
+        modifier.aspectRatio(if (big) 1.3f else 1f).scale(scale).clip(RoundedCornerShape(18.dp)).background(bg)
+            .border(1.dp, Color(0xFF232A38), RoundedCornerShape(18.dp))
             .semantics { contentDescription = (k.label.ifEmpty { "leere Taste" }) + (if (look.status.isNotEmpty()) ", ${look.status}" else "") + (if (hasHold) ", gedrückt halten für zweite Funktion" else "") }
             .pointerInput(page, k) {
                 val slop = with(density) { 10.dp.toPx() }
-                val swipeMin = with(density) { 45.dp.toPx() }
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     pressed = true
@@ -430,24 +428,21 @@ private fun DeckTile(
                         if (!c.pressed) break
                     }
                     pressed = false
-                    val dx = last.x - down.position.x
-                    val dy = last.y - down.position.y
-                    if (abs(dx) > swipeMin && abs(dx) > abs(dy)) swipe(dx < 0)
-                    else if (!moved && !held) tap()
+                    if (!moved && !held) tap()
                 }
             }
-            .padding(6.dp),
+            .padding(8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
-            if (look.label.isNotEmpty()) Text(look.label, color = fg, fontSize = fs(11.5f), lineHeight = fs(13f), fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (look.status.isNotEmpty()) Text(look.status, style = MonoLabel.copy(fontSize = fs(8.5f), lineHeight = fs(10f), letterSpacing = 0.sp, color = fg.copy(alpha = 0.8f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(if (big) 5.dp else 3.dp)) {
+            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(if (big) 34.dp else 28.dp))
+            if (look.label.isNotEmpty()) Text(look.label, color = fg, fontSize = fs(if (big) 17f else 14f), lineHeight = fs(if (big) 19f else 16f), fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (look.status.isNotEmpty()) Text(look.status, style = MonoLabel.copy(fontSize = fs(if (big) 11f else 9.5f), lineHeight = fs(if (big) 13f else 11f), letterSpacing = 0.sp, color = fg.copy(alpha = 0.8f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (hasHold) {
             Box(
-                Modifier.align(Alignment.BottomEnd).padding(2.dp).size(8.dp)
-                    .clip(RoundedCornerShape(topStart = 8.dp)).background(fg.copy(alpha = 0.55f))
+                Modifier.align(Alignment.BottomEnd).padding(2.dp).size(10.dp)
+                    .clip(RoundedCornerShape(topStart = 10.dp)).background(fg.copy(alpha = 0.55f))
             )
         }
     }
@@ -518,11 +513,18 @@ private fun DeckSlider(
                 Text(f.label.ifEmpty { "—" }.uppercase(), style = MonoLabel.copy(fontSize = fs(if (compact) 8f else 9f), letterSpacing = 0.6.sp, color = if (f.muted) DC.mutedLabel else Color(0xFF7D8BA3)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (modeTag.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Text(modeTag, style = MonoLabel.copy(fontSize = fs(8f), letterSpacing = 0.sp, color = A.blueLight)) }
             }
-            Text(
-                if (f.muted) f.value.uppercase() else f.value,
-                color = if (f.muted) DC.mutedText else if (f.active) A.fg else A.dim,
-                fontSize = fs(if (compact) 13.5f else 18f), fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val ic = deckIcon(f.icon)
+                if (ic != null && (!compact || f.muted)) {
+                    Icon(ic, contentDescription = null, tint = if (f.muted) DC.mutedText else if (f.active) A.blue else A.dim, modifier = Modifier.size(if (compact) 16.dp else 22.dp))
+                    Spacer(Modifier.width(if (compact) 4.dp else 8.dp))
+                }
+                Text(
+                    if (f.muted) f.value.uppercase() else f.value,
+                    color = if (f.muted) DC.mutedText else if (f.active) A.fg else A.dim,
+                    fontSize = fs(if (compact) 13.5f else 18f), fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(hint, style = MonoLabel.copy(fontSize = fs(if (compact) 7.5f else 8.5f), letterSpacing = 0.sp, color = Color(0xFF6F7C92)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
