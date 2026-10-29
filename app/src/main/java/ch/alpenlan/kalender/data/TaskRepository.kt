@@ -114,7 +114,11 @@ class TaskRepository(private val ctx: Context) {
         put("title", d.title)
         put("description", d.description)
         put("priority", if (d.highPriority) 1 else 0)
-        if (d.due != null) {
+        if (d.due != null && d.dueTime != null) {
+            put("due", d.due.atTime(d.dueTime).atZone(Dates.zone).toInstant().toEpochMilli())
+            put("is_allday", 0)
+            put("tz", Dates.zone.id)
+        } else if (d.due != null) {
             put("due", Dates.utcMidnight(d.due))
             put("is_allday", 1)
             putNull("tz")

@@ -19,6 +19,7 @@ import ch.alpenlan.kalender.MainActivity
 import ch.alpenlan.kalender.R
 import ch.alpenlan.kalender.data.Dates
 import ch.alpenlan.kalender.data.SettingsStore
+import ch.alpenlan.kalender.data.TaskRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
@@ -69,7 +70,8 @@ object ReminderEngine {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val fired = prefs.getStringSet("fired", emptySet())!!.toMutableSet()
 
-        val all = collect(ctx, now - 26 * 60 * 60_000L, now + 8L * 24 * 60 * 60_000L)
+        val all = collect(ctx, now - 26 * 60 * 60_000L, now + 8L * 24 * 60 * 60_000L) +
+            collectTasks(ctx, settings?.taskProvider ?: "auto", settings?.hiddenLists ?: emptySet(), now - LOOKBACK, now + 8L * 24 * 60 * 60_000L)
         if (enabled) {
             ensureChannel(ctx)
             all.filter { it.alarm <= now + 30_000 && it.alarm > now - LOOKBACK && it.key !in fired }.forEach { d ->
@@ -128,6 +130,19 @@ object ReminderEngine {
         return out
     }
 
+    /** Offene Aufgaben mit Uhrzeit melden sich zur fälligen Zeit. */
+    private fun collectTasks(ctx: Context, pref: String, hiddenLists: Set<Long>, from: Long, to: Long): List<Due> {
+        val repo = TaskRepository(ctx)
+        val p = runCatching { repo.provider(pref) }.getOrNull() ?: return emptyList()
+        val tasks = runCatching { repo.tasks(p) }.getOrDefault(emptyList())
+        return tasks.mapNotNull { t ->
+            if (t.done || t.due == null || t.dueTime == null || t.listId in hiddenLists) return@mapNotNull null
+            val at = t.due.atTime(t.dueTime).atZone(Dates.zone).toInstant().toEpochMilli()
+            if (at < from || at > to) return@mapNotNull null
+            Due("task|${t.id}|$at", -t.id, at, t.title, "Aufgabe · ${Dates.wdShortDate(t.due)} · ${Dates.hm(t.dueTime)}", at)
+        }
+    }
+
     private fun notify(ctx: Context, d: Due) {
         if (!canNotify(ctx)) return
         val open = Intent(ctx, MainActivity::class.java).apply {
@@ -141,7 +156,7 @@ object ReminderEngine {
             .setContentTitle(d.title)
             .setContentText(d.text)
             .setColor(0xFF4DA3FF.toInt())
-            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setCategory(if (d.eventId < 0) NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_EVENT)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setWhen(d.begin)
             .setShowWhen(true)

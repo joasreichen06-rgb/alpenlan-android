@@ -87,6 +87,7 @@ data class TaskDraft(
     val title: String,
     val description: String = "",
     val due: LocalDate? = null,
+    val dueTime: LocalTime? = null,
     val highPriority: Boolean = false,
     val parentId: Long? = null,
 )

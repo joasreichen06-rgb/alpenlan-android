@@ -138,7 +138,7 @@ private fun OutlineButton(text: String, modifier: Modifier = Modifier, color: Co
 private fun DaySheet(s: UiState, vm: AppViewModel, date: LocalDate) {
     val evs = s.visibleEvents.filter { it.occursOn(date) }
         .sortedWith(compareBy<EventItem>({ if (it.allDay || it.multiDay) 0 else 1 }, { it.startMin }))
-    val tasks = s.calendarTasks.filter { it.due == date }.sortedWith(compareBy({ it.done }, { !it.highPriority }))
+    val tasks = s.calendarTasks.filter { it.due == date }.sortedWith(compareBy({ it.done }, { it.dueTime ?: LocalTime.MAX }, { !it.highPriority }))
     val open = tasks.count { !it.done }
     SheetHeader(
         Dates.longDate(date),
@@ -453,6 +453,7 @@ private fun TaskEditor(s: UiState, vm: AppViewModel, edit: Sheet.EditTask) {
     var d by remember(edit) { mutableStateOf(edit.draft) }
     var err by remember(edit) { mutableStateOf<String?>(null) }
     var pick by remember { mutableStateOf(false) }
+    var pickTime by remember { mutableStateOf(false) }
     EditorHeader(if (d.taskId == null) (if (d.parentId != null) "Neue Unteraufgabe" else "Neue Aufgabe") else "Aufgabe bearbeiten", onCancel = {
         if (d.taskId != null) vm.openSheet(Sheet.Task(d.taskId!!)) else vm.closeSheet()
     }) {
@@ -473,7 +474,18 @@ private fun TaskEditor(s: UiState, vm: AppViewModel, edit: Sheet.EditTask) {
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         FieldButton("Fällig", d.due?.let { Dates.wdShortDate(it) } ?: "Ohne Datum", Modifier.weight(1f)) { pick = true }
-        OutlineButton("Ohne Datum", Modifier.width(120.dp), color = A.line2, textColor = A.muted, fill = Color.Transparent) { d = d.copy(due = null) }
+        OutlineButton("Ohne Datum", Modifier.width(120.dp), color = A.line2, textColor = A.muted, fill = Color.Transparent) { d = d.copy(due = null, dueTime = null) }
+    }
+    if (d.due != null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FieldButton("Uhrzeit", d.dueTime?.let { Dates.hm(it) } ?: "Ganzer Tag", Modifier.weight(1f)) { pickTime = true }
+            OutlineButton("Ganzer Tag", Modifier.width(120.dp), color = A.line2, textColor = A.muted, fill = Color.Transparent) { d = d.copy(dueTime = null) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(LocalTime.of(8, 0), LocalTime.of(12, 0), LocalTime.of(17, 0), LocalTime.of(20, 0)).forEach { t ->
+                Pill(Dates.hm(t), d.dueTime == t, { d = d.copy(dueTime = t) })
+            }
+        }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         listOf("Heute" to s.today, "Morgen" to s.today.plusDays(1), "Nächste Woche" to s.today.plusWeeks(1)).forEach { (label, date) ->
@@ -486,6 +498,7 @@ private fun TaskEditor(s: UiState, vm: AppViewModel, edit: Sheet.EditTask) {
         minLines = 3, modifier = Modifier.fillMaxWidth(), colors = fieldColors(),
     )
     if (pick) DateDialog(d.due ?: s.today, onDismiss = { pick = false }) { d = d.copy(due = it); pick = false }
+    if (pickTime) TimeDialog(d.dueTime ?: LocalTime.now().plusHours(1).withMinute(0).withSecond(0).withNano(0), onDismiss = { pickTime = false }) { d = d.copy(dueTime = it); pickTime = false }
 }
 
 @Composable

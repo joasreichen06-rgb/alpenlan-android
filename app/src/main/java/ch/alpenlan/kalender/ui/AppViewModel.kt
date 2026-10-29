@@ -337,7 +337,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun editTaskDraft(t: TaskItem) = Sheet.EditTask(
-        TaskDraft(taskId = t.id, listId = t.listId, title = t.title, description = t.description ?: "", due = t.due, highPriority = t.highPriority, parentId = t.parentId),
+        TaskDraft(taskId = t.id, listId = t.listId, title = t.title, description = t.description ?: "", due = t.due, dueTime = t.dueTime, highPriority = t.highPriority, parentId = t.parentId),
         t.listId,
     )
 

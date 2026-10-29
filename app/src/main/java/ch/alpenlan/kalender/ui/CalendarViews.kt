@@ -76,7 +76,7 @@ private fun eventsByDay(s: UiState, from: LocalDate, toIncl: LocalDate): Map<Loc
 }
 
 private fun tasksByDay(s: UiState): Map<LocalDate, List<TaskItem>> =
-    s.calendarTasks.groupBy { it.due!! }.mapValues { (_, v) -> v.sortedWith(compareBy({ it.done }, { !it.highPriority }, { it.title })) }
+    s.calendarTasks.groupBy { it.due!! }.mapValues { (_, v) -> v.sortedWith(compareBy({ it.done }, { it.dueTime ?: java.time.LocalTime.MAX }, { !it.highPriority }, { it.title })) }
 
 private fun isWeekend(d: DayOfWeek) = d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY
 
@@ -377,7 +377,7 @@ private fun WeekBar(s: UiState, vm: AppViewModel, bar: Bar, colW: Dp) {
         ) {
             Box(Modifier.size(7.dp).clip(CircleShape).then(if (t.done) Modifier.background(lc) else Modifier.border(1.5.dp, lc, CircleShape)))
             Text(
-                t.title, color = if (t.done) A.dim else A.fg, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                (t.dueTime?.let { Dates.hm(it) + " " } ?: "") + t.title, color = if (t.done) A.dim else A.fg, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, textDecoration = if (t.done) TextDecoration.LineThrough else null,
             )
         }
@@ -392,7 +392,7 @@ fun DayView(s: UiState, vm: AppViewModel) {
     val ws = Dates.weekStart(sel, s.settings.firstDayOfWeek)
     val evs = s.visibleEvents.filter { it.occursOn(sel) }
     val allDay = sortForDay(evs.filter { !it.timedSingleDay })
-    val dayTasks = s.calendarTasks.filter { it.due == sel }.sortedWith(compareBy({ it.done }, { !it.highPriority }))
+    val dayTasks = s.calendarTasks.filter { it.due == sel }.sortedWith(compareBy({ it.done }, { it.dueTime ?: java.time.LocalTime.MAX }, { !it.highPriority }))
     Column(Modifier.fillMaxSize().swipe(onPrev = { vm.shift(-1) }, onNext = { vm.shift(1) })) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
             for (i in 0L until 7L) {
@@ -479,6 +479,7 @@ fun TaskRowCompact(s: UiState, vm: AppViewModel, t: TaskItem) {
             Modifier.weight(1f).height(42.dp).clickable { vm.openSheet(Sheet.Task(t.id)) }.padding(end = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            t.dueTime?.let { Mono(Dates.hm(it), size = 11, spacing = 0.2, color = A.blueLight, modifier = Modifier.padding(end = 8.dp)) }
             TaskTitle(t.title, t.done, size = 13, modifier = Modifier.weight(1f), maxLines = 1)
             Dot(dotColor(s.listColor(t.listId)), 6.dp)
             Spacer(Modifier.width(5.dp))

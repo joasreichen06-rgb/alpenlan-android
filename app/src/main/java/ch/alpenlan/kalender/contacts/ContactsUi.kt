@@ -25,8 +25,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -103,9 +101,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
@@ -362,7 +358,8 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
                 }
             }
             if (!searching && letterIndex.size > 3) {
-                AlphabetBar(letterIndex.keys.toList(), Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 8.dp)) { l ->
+                val abc = remember(letterIndex) { ('A'..'Z').map { it.toString() } + letterIndex.keys.filter { it.length != 1 || it[0] !in 'A'..'Z' }.sorted() }
+                CurvedAlphabet(abc, letterIndex.keys, Modifier.align(Alignment.CenterEnd).padding(vertical = 8.dp)) { l ->
                     letterIndex[l]?.let { idx -> scope.launch { listState.scrollToItem(idx) } }
                 }
             }
@@ -463,30 +460,6 @@ private fun ContactRow(s: ContactsState, vm: ContactsViewModel, c: ContactSummar
             Spacer(Modifier.width(6.dp))
             Mono("Gerät", size = 9, spacing = 0.6, color = A.dim)
         }
-    }
-}
-
-@Composable
-private fun AlphabetBar(letters: List<String>, modifier: Modifier, onLetter: (String) -> Unit) {
-    var height by remember { mutableStateOf(1) }
-    Column(
-        modifier
-            .width(24.dp)
-            .onSizeChanged { height = it.height.coerceAtLeast(1) }
-            .pointerInput(letters) {
-                detectTapGestures { pos ->
-                    onLetter(letters[(pos.y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)])
-                }
-            }
-            .pointerInput(letters) {
-                detectVerticalDragGestures { change, _ ->
-                    onLetter(letters[(change.position.y / height * letters.size).toInt().coerceIn(0, letters.lastIndex)])
-                }
-            },
-        verticalArrangement = Arrangement.SpaceEvenly,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        letters.forEach { Text(it, style = MonoLabel.copy(fontSize = 10.sp, letterSpacing = 0.sp, color = A.blueLight)) }
     }
 }
 
