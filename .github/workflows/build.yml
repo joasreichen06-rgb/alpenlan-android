@@ -50,7 +50,13 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace assembleRelease
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace assembleRelease 2>&1 | tee build.log || {
+            # Kompilierfehler als Hinweise anzeigen (sichtbar ohne Log-Download)
+            grep -E '^e: ' build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            grep -E 'What went wrong' -A4 build.log | head -12 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
           cp app/build/outputs/apk/release/app-release.apk "alpenlan-kalender-${VERSION_NAME}.apk"
 
       - uses: actions/upload-artifact@v4
