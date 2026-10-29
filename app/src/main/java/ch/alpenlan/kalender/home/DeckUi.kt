@@ -384,7 +384,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
         Summary(m)
     }
     Text(
-        "Tasten: tippen = Aktion, halten = zweite Funktion (Ecke), seitlich wischen = nächste Seite. Felder: seitlich ziehen = einstellen, tippen = drücken, halten = Zusatz.",
+        "Tasten: tippen = Aktion, halten = zweite Funktion (Ecke). Felder: seitlich ziehen = einstellen, tippen = drücken, halten = Zusatz.",
         color = A.dim, fontSize = 11.5.sp, lineHeight = 16.sp,
     )
 }
