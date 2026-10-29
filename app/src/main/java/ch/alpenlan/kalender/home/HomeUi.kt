@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.window.DialogProperties
@@ -188,7 +189,7 @@ private fun LoginScreen(s: HomeState, vm: HomeViewModel) {
         Spacer(Modifier.height(14.dp))
         Text(buildAnnotatedString { append("ALPEN"); withStyle(SpanStyle(color = A.blue)) { append("LAN.") } }, fontFamily = Syne, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp, color = A.fg)
         Spacer(Modifier.height(8.dp))
-        Hint("Zimmer, Server und Dienste an einem Ort. Die Anmeldung läuft über dein Alpenlan-Konto (Authentik), genau wie bei der Cloud.")
+        Hint("PC, Anlage, Drucker, Server und Dienste an einem Ort. Die Anmeldung läuft über dein Alpenlan-Konto (Authentik), genau wie bei der Cloud.")
         Spacer(Modifier.height(20.dp))
         LinkButton(if (s.busy) "Anmelden …" else "Mit Alpenlan anmelden", Modifier.fillMaxWidth(), primary = true) {
             if (!s.busy) ctx.startActivity(vm.login())
@@ -205,7 +206,7 @@ private fun Main(s: HomeState, vm: HomeViewModel) {
     val m = s.model
     val (main, accent) = when (s.tab) {
         HomeTab.OVERVIEW -> "Über" to "sicht."
-        HomeTab.ROOM -> "Zim" to "mer."
+        HomeTab.ROOM -> "Con" to "trol."
         HomeTab.SERVER -> "Ser" to "ver."
         HomeTab.APPS -> "Ap" to "ps."
     }
@@ -243,7 +244,7 @@ private fun Main(s: HomeState, vm: HomeViewModel) {
             }
             when (s.tab) {
                 HomeTab.OVERVIEW -> Overview(s, vm)
-                HomeTab.ROOM -> Room(s, vm)
+                HomeTab.ROOM -> DeckControl(s, vm)
                 HomeTab.SERVER -> Server(s, vm)
                 HomeTab.APPS -> Apps(s, vm)
             }
@@ -305,7 +306,7 @@ private fun Overview(s: HomeState, vm: HomeViewModel) {
     if (m != null) {
         Card {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Mono("Zimmer", color = A.blue, modifier = Modifier.weight(1f))
+                Mono("Control", color = A.blue, modifier = Modifier.weight(1f))
                 Text("Alles anzeigen", color = A.blueLight, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { vm.setTab(HomeTab.ROOM) }.padding(6.dp))
             }
@@ -403,98 +404,6 @@ private fun AgendaRow(e: EventItem, s: HomeState) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(chipColor(e.color)))
         Text(e.title, color = A.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(day, color = A.muted, fontSize = 12.sp)
-    }
-}
-
-// ------------------------------------------------------------------ Zimmer
-
-@Composable
-private fun Room(s: HomeState, vm: HomeViewModel) {
-    val m = s.model ?: run { Hint("Warte auf Daten von Alpenlan Control …"); return }
-    if (!m.haConnected) Hint("Home Assistant ist gerade nicht verbunden – Werte können veraltet sein.")
-    Card {
-        CardHead("PC", if (m.pc.online) GREEN else if (m.pc.booting) A.warn else GRAY, if (m.pc.online) "online" else if (m.pc.booting) "startet …" else "aus")
-        if (m.pc.online) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Stat("CPU", m.pc.cpu?.let { "${it.roundToInt()} %" } ?: "–")
-                Stat("Temp", m.pc.temp?.let { "${it.roundToInt()} °C" } ?: "–")
-                Stat("RAM", m.pc.memory?.let { "${it.roundToInt()} %" } ?: "–")
-            }
-            if (m.pc.updates) Text("Systemupdates verfügbar", color = A.warn, fontSize = 13.sp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (m.pc.online) {
-                Action("Herunterfahren", danger = true) { vm.pcToggle() }
-                Action("Sperren") { vm.act("pc_lock", msg = "PC gesperrt") }
-            } else {
-                Action(if (m.pc.booting) "Startet …" else "Einschalten", primary = !m.pc.booting) { if (!m.pc.booting) vm.pcToggle() }
-            }
-        }
-        if (m.pc.online) Row { Action("Neu starten") { vm.act("pc_restart", msg = "PC startet neu") } }
-        Hint("Startet der PC, schaltet sich die Anlage mit ein und wechselt auf den PC-Eingang.")
-    }
-    Card {
-        CardHead("Anlage", if (m.avr.on) GREEN else GRAY, "Marantz NR1609")
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            RoundBtn("−", "Leiser", 52) { vm.volume(-2) }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    if (!m.avr.on) "AUS" else if (m.avr.muted) "—" else "${m.avr.volume ?: "–"}",
-                    fontFamily = if (m.avr.on && !m.avr.muted) ch.alpenlan.kalender.ui.Manrope else Syne,
-                    fontWeight = if (m.avr.on && !m.avr.muted) FontWeight.Bold else FontWeight.ExtraBold, fontSize = 40.sp, color = if (m.avr.on) A.fg else GRAY,
-                )
-                Mono(if (m.avr.on) "Lautstärke · max ${m.avr.max}" else "Drehen schaltet nicht ein", size = 10, spacing = 1.0)
-            }
-            RoundBtn("+", "Lauter", 52) { vm.volume(2) }
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            m.avr.sources.forEach { src ->
-                Pill(src.name, m.avr.on && m.avr.source == src.id, {
-                    vm.act("input", src.id, optimistic = { it.copy(avr = it.avr.copy(source = src.id, on = true)) })
-                })
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Action(if (m.avr.on) "Ausschalten" else "Einschalten", primary = !m.avr.on) { vm.act("avr_toggle") }
-            Action(if (m.avr.muted) "Ton an" else "Stumm") {
-                if (m.avr.on) vm.act("mute", optimistic = { it.copy(avr = it.avr.copy(muted = !it.avr.muted)) })
-            }
-        }
-    }
-    val p = m.printer
-    Card {
-        CardHead("3D-Drucker", if (p.state == "printing") A.warn else if (p.state == "unavailable") GRAY else GREEN, printerState(p.state))
-        if (p.camera) CameraView(s)
-        if (p.state == "printing" || p.state == "paused") {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(p.file.ifBlank { "Druck" }, color = A.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${p.progress.roundToInt()} %", style = MonoLabel.copy(fontSize = 13.sp, letterSpacing = 0.sp, color = Color(0xFFFFC46E)))
-            }
-            Bar((p.progress / 100).toFloat(), if (p.state == "printing") A.warn else GRAY)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Stat("Rest", if (p.remainMin > 0) "${p.remainMin / 60} h ${p.remainMin % 60}" else "–")
-            Stat("Düse", p.nozzle?.let { "${it.roundToInt()} °C" } ?: "–")
-            Stat("Bett", p.bed?.let { "${it.roundToInt()} °C" } ?: "–")
-        }
-        val ctx = LocalContext.current
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (p.state == "printing") Action("Pause") { vm.act("prn_pause", msg = "Druck pausiert") }
-            if (p.state == "paused") Action("Fortsetzen", primary = true) { vm.act("prn_resume", msg = "Druck läuft weiter") }
-            Action("Mainsail öffnen") { launch(ctx, emptyList(), p.web.ifBlank { "https://3d-drucker.alpenlan.com" }) }
-        }
-    }
-    if (m.events.isNotEmpty()) {
-        Card {
-            Mono("Verlauf", color = A.blue)
-            m.events.take(8).forEach { ev ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(ev.time.take(5), style = MonoLabel.copy(fontSize = 11.sp, letterSpacing = 0.sp, color = A.muted), modifier = Modifier.width(42.dp))
-                    Text(ev.msg, color = A.fg2, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Mono(ev.src, size = 9, spacing = 0.6, color = A.dim)
-                }
-            }
-        }
     }
 }
 
@@ -637,9 +546,9 @@ private fun Apps(s: HomeState, vm: HomeViewModel) {
 // ------------------------------------------------------------------ Kamera
 
 @Composable
-private fun CameraView(s: HomeState) {
+internal fun CameraView(s: HomeState, fullState: MutableState<Boolean> = remember { mutableStateOf(false) }) {
     val cam = s.camera
-    var full by remember { mutableStateOf(false) }
+    var full by fullState
     val ratio = if (cam != null && cam.height > 0) cam.width.toFloat() / cam.height else 4f / 3f
     Box(
         Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(12.dp)).background(Color.Black)

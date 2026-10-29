@@ -15,9 +15,11 @@ import java.net.URL
 data class Pc(val online: Boolean, val booting: Boolean, val cpu: Double?, val temp: Double?, val memory: Double?, val updates: Boolean)
 data class Source(val id: String, val name: String)
 data class Avr(val available: Boolean, val on: Boolean, val volume: Int?, val max: Int, val muted: Boolean, val source: String?, val sources: List<Source>)
+data class Tune(val ok: Boolean, val speed: Int?, val flow: Int?, val fan: Int?, val zoff: Double?, val homed: String)
 data class Printer(
     val state: String, val progress: Double, val remainMin: Int, val file: String,
     val nozzle: Double?, val bed: Double?, val camera: Boolean, val web: String,
+    val tune: Tune? = null,
 )
 data class Guest(val id: Int, val type: String, val name: String, val status: String, val cpu: Double, val mem: Double?, val uptime: Long)
 data class Disk(val name: String, val used: Double, val total: Double, val pct: Double?)
@@ -55,6 +57,9 @@ fun parseModel(j: JSONObject): ControlModel {
         printer = Printer(
             pr.optString("state", "unavailable"), pr.optDouble("progress", 0.0).let { if (it.isNaN()) 0.0 else it },
             pr.optInt("remain_min"), pr.optString("file"), pr.dbl("nozzle"), pr.dbl("bed"), pr.optBoolean("camera"), pr.optString("web"),
+            pr.optJSONObject("tune")?.let { t ->
+                Tune(t.optBoolean("ok"), t.dbl("speed")?.toInt(), t.dbl("flow")?.toInt(), t.dbl("fan")?.toInt(), t.dbl("zoff"), t.optString("homed"))
+            },
         ),
         proxmox = px?.let { p ->
             val b = p.optJSONObject("backup")

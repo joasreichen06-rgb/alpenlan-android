@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
-enum class HomeTab(val label: String) { OVERVIEW("Übersicht"), ROOM("Zimmer"), SERVER("Server"), APPS("Apps") }
+enum class HomeTab(val label: String) { OVERVIEW("Übersicht"), ROOM("Control"), SERVER("Server"), APPS("Apps") }
 
 data class HomeState(
     val loggedIn: Boolean = false,
@@ -83,6 +83,33 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleGuest(id: Int) = _s.update { it.copy(openGuest = if (it.openGuest == id) null else id) }
 
     private fun toast(t: String) = _s.update { it.copy(toast = t, toastStamp = System.nanoTime()) }
+    fun info(t: String) = toast(t)
+
+    // Feineinstellungen am Drucker: sofort anzeigen, gesammelt senden
+    private val tunePending = HashMap<String, Int>()
+    private var tuneJob: Job? = null
+    fun tune(a: String, dir: Int) {
+        val t = _s.value.model?.printer?.tune
+        if (t == null || !t.ok) { toast("Drucker-Feineinstellung nicht erreichbar"); return }
+        if (a == "prn_zoff" && _s.value.model?.printer?.state != "printing" && !t.homed.contains("z")) { toast("Z-Offset nur während des Drucks"); return }
+        val nt = when (a) {
+            "prn_speed" -> t.copy(speed = ((t.speed ?: 100) + 5 * dir).coerceIn(10, 300))
+            "prn_flow" -> t.copy(flow = ((t.flow ?: 100) + dir).coerceIn(50, 150))
+            "prn_fan" -> t.copy(fan = ((t.fan ?: 0) + 10 * dir).coerceIn(0, 100))
+            "prn_zoff" -> t.copy(zoff = Math.round(((t.zoff ?: 0.0) + 0.01 * dir) * 1000) / 1000.0)
+            else -> return
+        }
+        _s.update { s -> s.copy(model = s.model?.let { m -> m.copy(printer = m.printer.copy(tune = nt)) }) }
+        tunePending[a] = (tunePending[a] ?: 0) + dir
+        tuneJob?.cancel()
+        tuneJob = viewModelScope.launch {
+            delay(300)
+            val batch = HashMap(tunePending); tunePending.clear()
+            batch.forEach { (act, steps) -> if (steps != 0) runCatching { api.action(act, steps) } }
+            delay(400)
+            refresh()
+        }
+    }
     fun dismissToast() = _s.update { it.copy(toast = null) }
 
     /** Läuft nur, solange die App sichtbar ist. */
