@@ -1,8 +1,5 @@
 package ch.alpenlan.kalender.home
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -366,11 +363,8 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
                 }
             }
             val oi = overlay
-            AnimatedVisibility(oi != null, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.offset(y = (-82).dp)) {
-                if (oi != null) {
-                    val d = p.dials[oi]
-                    DeckOverlay(faceOf(d, modes["${p.id}:$oi"] ?: 0, m))
-                }
+            if (oi != null) {
+                Box(Modifier.offset(y = (-82).dp)) { DeckOverlay(faceOf(p.dials[oi], modes["${p.id}:$oi"] ?: 0, m)) }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
