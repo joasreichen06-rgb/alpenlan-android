@@ -40,3 +40,13 @@ Lokal: `./gradlew assembleDebug` (Android SDK nötig).
 Zweites App-Symbol in derselben APK. Liest und schreibt die Android-Kontakte, die DAVx⁵ per CardDAV mit Nextcloud abgleicht
 (Kontotyp `bitfire.at.davdroid.address_book`): Suche, Favoriten, Geburtstage, A–Z-Leiste, Anrufen/SMS/E-Mail/Karte,
 Erstellen/Bearbeiten/Löschen mit Rückgängig.
+
+## Alpenlan Light
+
+Viertes App-Symbol in derselben APK: das Handy als Lichtquelle im Publikum, gesteuert vom Lichtpult (Art-Net) über den Alpenlan-Light-Server (`light.alpenlan.com`, im Heimnetz `192.168.1.212:8090`).
+
+- **Live verbinden:** Server und Zone (1–8 oder Zufall) wählen. Bildschirm und Taschenlampe folgen dem Pult, synchron über eine abgeglichene Uhr. Ein Doppeltipp zeigt Verbindung und Verzögerung.
+- **Testmodus:** spielt alle Effekte ohne Server ab (Farben, Dimmer, Strobe, Funkeln, Pulsieren, Gruppen-Blink, Taschenlampe, Regenbogen). Tippen springt weiter.
+- **Taschenlampe kurz testen.**
+
+Code unter `light/`. Die Einstellungsseite ist in Compose, das Vollbild-Licht (`LightShowActivity`) ist bewusst schlicht gehalten, für eine ruhige Bildrate. Für unverschlüsselte Verbindungen ist nur `192.168.1.212` freigegeben (`res/xml/network_security_config.xml`).

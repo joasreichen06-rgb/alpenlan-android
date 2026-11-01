@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alpenlan Light: drei Handys, das mittlere leuchtet, darunter der Grat -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#00000000" android:strokeColor="#FFEEF2F7" android:strokeWidth="2.5"
+        android:pathData="M35,40h8a2,2 0,0 1,2 2v18a2,2 0,0 1,-2 2h-8a2,2 0,0 1,-2 -2v-18a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#FF4DA3FF"
+        android:pathData="M50,34h8a2,2 0,0 1,2 2v18a2,2 0,0 1,-2 2h-8a2,2 0,0 1,-2 -2v-18a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFEEF2F7" android:strokeWidth="2.5"
+        android:pathData="M65,40h8a2,2 0,0 1,2 2v18a2,2 0,0 1,-2 2h-8a2,2 0,0 1,-2 -2v-18a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FF4DA3FF" android:strokeWidth="3"
+        android:strokeLineJoin="round" android:strokeLineCap="round"
+        android:pathData="M32,74l7,3.5l7,-4.5l7,4.5l7,-5.5l7,3.5l7,-2.5" />
+</vector>
