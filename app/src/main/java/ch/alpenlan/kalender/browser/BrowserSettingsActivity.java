@@ -209,6 +209,36 @@ public class BrowserSettingsActivity extends Activity {
         media.setPadding(dp(14), dp(12), dp(14), dp(12));
         media.setBackground(round(CARD, dp(14), LINE));
         page.addView(media);
+        page.addView(space(10));
+
+        Switch scan = new Switch(this);
+        scan.setText("Seiteninhalt prüfen (Seiten mit mehreren gesperrten Wörtern werden gesperrt)");
+        scan.setTextColor(FG);
+        scan.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        scan.setChecked(store.scanPages());
+        scan.setPadding(dp(14), dp(12), dp(14), dp(12));
+        scan.setBackground(round(CARD, dp(14), LINE));
+        page.addView(scan);
+        page.addView(space(18));
+
+        // --- Positivliste
+        page.addView(label("Strengster Modus: nur erlaubte Seiten"));
+        TextView wlInfo = text("Wenn eingeschaltet, öffnen sich nur die Seiten auf dieser Liste "
+            + "(plus Suchmaschinen und Geräte im Heimnetz). Alles andere ist gesperrt. "
+            + "Das ist der einzige wirklich lückenlose Schutz.", MUTED, 13);
+        wlInfo.setPadding(0, 0, 0, dp(8));
+        page.addView(wlInfo);
+        Switch wlOn = new Switch(this);
+        wlOn.setText("Nur erlaubte Seiten");
+        wlOn.setTextColor(FG);
+        wlOn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        wlOn.setChecked(store.whitelistOnly());
+        wlOn.setPadding(dp(14), dp(12), dp(14), dp(12));
+        wlOn.setBackground(round(CARD, dp(14), LINE));
+        page.addView(wlOn);
+        page.addView(space(8));
+        EditText wl = area(store.whitelist(), "eine pro Zeile, z. B.\nsrf.ch\nwikipedia.org");
+        page.addView(wl);
         page.addView(space(18));
 
         // --- Listen
@@ -257,7 +287,8 @@ public class BrowserSettingsActivity extends Activity {
             View checked = engines.findViewById(engines.getCheckedRadioButtonId());
             if (checked != null && checked.getTag() instanceof Filter.Engine) e = (Filter.Engine) checked.getTag();
             store.saveFilter(domains.getText().toString(), words.getText().toString(),
-                allow.getText().toString(), e, titles.isChecked(), media.isChecked());
+                allow.getText().toString(), e, titles.isChecked(), media.isChecked(), scan.isChecked(),
+                wlOn.isChecked(), wl.getText().toString());
             Filter f = store.buildFilter();
             toast("Gespeichert: " + f.domainCount() + " Seiten, " + f.keywordCount() + " Wörter gesperrt");
             finish();

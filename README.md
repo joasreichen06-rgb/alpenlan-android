@@ -55,7 +55,11 @@ Code unter `light/`. Die Einstellungsseite ist in Compose, das Vollbild-Licht (`
 
 Fünftes App-Symbol in derselben APK: ein Browser mit fest eingebautem Filter. Weil alles in der App passiert, wirkt er gleich über WLAN, Mobilfunk und VPN.
 
-- **Jede Anfrage wird geprüft** (Seite, Bilder, Videos, Skripte, Service Worker). über 160 Seiten sind fest gesperrt (YouTube, Instagram, TikTok, Facebook, X, Reddit, Snapchat, Erwachsenen-Seiten, Übersetzungs-Proxys, Web-Archive, Suchmaschinen ohne SafeSearch), dazu 133 Wörter wie «bikini», «baywatch», «bademode», «topless», «youtube» – auch in Schreibweisen wie «B1k1n1».
+- **Jede Anfrage wird geprüft** (Seite, Bilder, Videos, Skripte, Service Worker). über 160 Seiten sind fest gesperrt (YouTube, Instagram, TikTok, Facebook, X, Reddit, Snapchat, Erwachsenen-Seiten, Übersetzungs-Proxys, Web-Archive, Suchmaschinen ohne SafeSearch), dazu rund 190 Wörter wie «bikini», «baywatch», «bademode», «topless», «youtube» – auch in Schreibweisen wie «B1k1n1».
+- **Worterkennung gegen Umgehung** (`WordMatcher.java`): erkennt Wörter auch mit Leerzeichen, Punkten oder Bindestrichen dazwischen («bay watch», «b.i.k.i.n.i»), mit Zahlen/Zeichen («b1k1n1», «$exy»), Akzenten und kyrillischen Doppelgängern, wiederholten Buchstaben («biiiikini») und einem Tippfehler bei langen Wörtern («baywatsch»). Harmlose Wörter wie «Sussex», «Nacktschnecke» oder «exotisch» bleiben erlaubt. Zufällige Kennungen in Adressen werden übersprungen, Suchbegriffe (`q=` usw.) immer vollständig geprüft.
+- **Seiteninhalt** wird nach dem Laden (und nach 2,5 s und 8 s nochmals) geprüft, inklusive Bildbeschreibungen: ein «starkes» Wort, 2 verschiedene Wörter oder 3 Treffer sperren die Seite. Plattform-Namen in Fusszeilen zählen nicht.
+- **Suchseiten ohne Bilder:** Vorschaubilder von Google, Bing und DuckDuckGo werden blockiert und ausgeblendet.
+- **Positivliste** (strengster Modus, mit PIN): nur aufgeführte Seiten plus Suchmaschinen und Heimnetz.
 - **SafeSearch erzwungen** bei Google (`safe=active`), Bing (`adlt=strict`) und DuckDuckGo (`kp=1`).
 - **Einstellungen hinter PIN** (⋮ → Filter-Einstellungen): eigene Seiten, Wörter, Ausnahmen, Suchmaschine. Die fest eingebauten Listen lassen sich nicht entfernen.
 - **Bilder- und Videosuche gesperrt** (Google, Bing, DuckDuckGo), abschaltbar mit PIN. Alle grossen Social-Media-Plattformen mit Endlos-Feed (TikTok, Facebook, X, Threads, Reddit, Snapchat, Pinterest, Tumblr, Bluesky, Twitch, 9GAG …) sind fest gesperrt.

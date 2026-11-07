@@ -27,15 +27,22 @@ final class Store {
     Filter.Engine engine() { return Filter.Engine.byName(p.getString("engine", "GOOGLE")); }
     boolean checkTitles()  { return p.getBoolean("titles", true); }
     boolean blockMediaSearch() { return p.getBoolean("media", true); }
+    boolean scanPages()    { return p.getBoolean("scan", true); }
+    boolean whitelistOnly() { return p.getBoolean("wl_on", false); }
+    String whitelist()     { return p.getString("wl", Filter.DEFAULT_WHITELIST); }
 
     void saveFilter(String domains, String keywords, String allow, Filter.Engine engine, boolean titles,
-                    boolean media) {
+                    boolean media, boolean scan, boolean whitelistOn, String whitelist) {
         p.edit().putString("domains", domains).putString("keywords", keywords)
             .putString("allow", allow).putString("engine", engine.name())
-            .putBoolean("titles", titles).putBoolean("media", media).apply();
+            .putBoolean("titles", titles).putBoolean("media", media).putBoolean("scan", scan)
+            .putBoolean("wl_on", whitelistOn).putString("wl", whitelist).apply();
     }
 
-    Filter buildFilter() { return new Filter(extraDomains(), extraKeywords(), allowList(), blockMediaSearch()); }
+    Filter buildFilter() {
+        return new Filter(extraDomains(), extraKeywords(), allowList(), blockMediaSearch(),
+            whitelistOnly(), whitelist());
+    }
 
     // ---------------------------------------------------------------- PIN
 

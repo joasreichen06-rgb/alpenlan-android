@@ -97,6 +97,7 @@ public class BrowserActivity extends Activity {
     private volatile Filter filter;
     private Filter.Engine engine;
     private boolean checkTitles;
+    private boolean scanPages;
 
     private LinearLayout root;
     private WebView web;
@@ -329,6 +330,7 @@ public class BrowserActivity extends Activity {
         filter = store.buildFilter();
         engine = store.engine();
         checkTitles = store.checkTitles();
+        scanPages = store.scanPages();
     }
 
     /** Nach Änderungen in den Einstellungen die offene Seite nochmals prüfen. */
@@ -466,6 +468,52 @@ public class BrowserActivity extends Activity {
         String shown = url.replaceFirst("^https?://(www\\.)?", "");
         if (shown.endsWith("/")) shown = shown.substring(0, shown.length() - 1);
         bar.setText(shown);
+    }
+
+    // ================================================================ Seiteninhalt
+
+    /** Liest den sichtbaren Text, Bildbeschreibungen und Links der Seite (max. 60'000 Zeichen). */
+    private static final String PAGE_TEXT_JS = "(function(){try{"
+        + "var t=document.title+'\\n'+(document.body?document.body.innerText:'');"
+        + "var a=[];var im=document.images;"
+        + "for(var i=0;i<im.length&&i<400;i++){if(im[i].alt)a.push(im[i].alt);if(im[i].title)a.push(im[i].title);}"
+        + "var m=document.querySelector('meta[name=description]');if(m)a.push(m.content);"
+        + "return (t+'\\n'+a.join('\\n')).slice(0,60000);}catch(e){return '';}})()";
+
+    private void scanPage(WebView view, String url) {
+        if (!scanPages || url == null || url.startsWith("alpenlan:")) return;
+        if (!url.equals(view.getUrl())) return;
+        String host = Uri.parse(url).getHost();
+        if (host == null || Filter.isLocalAddress(host) || filter.allowsWordsOn(host)) return;
+        view.evaluateJavascript(PAGE_TEXT_JS, value -> {
+            if (value == null || !url.equals(view.getUrl())) return;
+            String text;
+            try {
+                Object o = new org.json.JSONTokener(value).nextValue();
+                text = o instanceof String ? (String) o : "";
+            } catch (Exception e) {
+                return;
+            }
+            String reason = filter.scanPage(text);
+            if (reason != null) {
+                view.stopLoading();
+                showBlocked(url, reason);
+            }
+        });
+    }
+
+    /** Blendet auf Suchseiten alle Bilder und Videos aus (auch eingebettete Vorschaubilder). */
+    private static final String HIDE_IMAGES_JS = "(function(){if(document.getElementById('alpenlan-noimg'))return;"
+        + "var s=document.createElement('style');s.id='alpenlan-noimg';"
+        + "s.textContent='img,picture,video,canvas,svg image,g-img,[role=img]{visibility:hidden!important;}"
+        + "[style*=background-image]{background-image:none!important;}';"
+        + "(document.head||document.documentElement).appendChild(s);})()";
+
+    private void hideSearchImages(WebView view, String url) {
+        if (url == null || !filter.blocksMediaSearch()) return;
+        String host = Uri.parse(url).getHost();
+        if (host == null || !filter.isSearchEngine(host)) return;
+        view.evaluateJavascript(HIDE_IMAGES_JS, null);
     }
 
     // ================================================================ Netzwerk-Anzeige
@@ -659,6 +707,16 @@ public class BrowserActivity extends Activity {
                 clearHistoryOnLoad = false;
                 view.clearHistory();
             }
+            hideSearchImages(view, url);
+            scanPage(view, url);
+            // Nachgeladene Inhalte (Endlos-Listen, Galerien) später nochmals prüfen
+            view.postDelayed(() -> scanPage(view, url), 2500);
+            view.postDelayed(() -> scanPage(view, url), 8000);
+        }
+
+        @Override
+        public void onPageCommitVisible(WebView view, String url) {
+            hideSearchImages(view, url);
         }
     }
 
@@ -666,6 +724,7 @@ public class BrowserActivity extends Activity {
 
         @Override
         public void onProgressChanged(WebView view, int p) {
+            if (p >= 15) hideSearchImages(view, view.getUrl());
             progress.animate().cancel();
             if (p >= 100) {
                 progress.setScaleX(1f);

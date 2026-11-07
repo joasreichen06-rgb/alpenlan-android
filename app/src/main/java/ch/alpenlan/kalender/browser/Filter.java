@@ -3,7 +3,6 @@ package ch.alpenlan.kalender.browser;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -93,23 +92,31 @@ public final class Filter {
         "dessous", "unterwäsche", "erotik", "erotic", "sexy", "sex video", "sexvideo", "camgirl",
         "onlyfans", "fansly", "rule34", "r34", "milf", "boobs", "titten", "brüste", "busen",
         "stripper", "striptease", "playboy", "nipple", "nippel", "booty", "twerk", "thong",
-        "string tanga", "upskirt", "hot girls", "youtube", "instagram",
+        "string tanga", "upskirt", "hot girl", "youtube", "instagram",
         // Bademode und Strand
         "baywatch", "badeanzug", "badeanzuege", "bademode", "swimsuit", "swimwear", "beachwear",
         "monokini", "tankini", "bikinimodel", "beach babe", "wet t shirt", "wet tshirt",
         // Unterwäsche und Dessous
         "reizwaesche", "negligee", "strapse", "panties", "panty", "hoeschen",
         "victoria s secret", "victorias secret", "savage x fenty", "corsage",
-        "sports illustrated swimsuit", "yoga pants",
+        "sports illustrated swimsuit", "yoga pants", "tanga", "g string", "hotpants", "hot pants",
+        "unterhose", "bralette", "sport bh", "bh", "braless", "no bra", "underwear", "camel toe",
+        "sideboob", "underboob", "minirock", "strumpfhose", "nylons", "bathing suit", "string bikini",
+        "culotte", "sous vetement", "maillot de bain", "costume da bagno", "reggiseno", "mutande",
         // Freizügig
         "topless", "oben ohne", "nacktbaden", "fkk", "nudist", "naturist", "freikoerperkultur",
         "cleavage", "dekollete", "busty", "hottie", "hotties", "pinup", "pin up", "glamour model",
-        "thirst trap", "lap dance", "stripclub", "strip club", "poledance girl",
+        "thirst trap", "lap dance", "stripclub", "poledance girl", "heisse frau", "heisse girl",
+        "heisse maedchen", "sexy girl", "babe", "babes", "baddie", "thicc", "spicy pics",
+        "nue", "nues", "seins", "sexe", "nuda", "nudo", "tette", "desnuda", "tetas",
         // Sexuell
         "sex", "sexual", "erotisch", "erotica", "porno", "pron", "fetish", "fetisch", "bdsm",
         "kinky", "horny", "lewd", "ecchi", "ahegao", "escort", "callgirl", "hooker", "bordell",
         "brothel", "seitensprung", "sugar daddy", "sugardaddy", "camsex", "webcam girl",
         "feet pics", "foot fetish", "deepnude", "undress ai", "nudify", "clothoff",
+        "masturb", "orgasm", "dildo", "blowjob", "handjob", "cumshot", "creampie", "gangbang",
+        "threesome", "anal", "ficken", "gefickt", "fick", "bumsen", "nutte", "hure", "schlampe",
+        "muschi", "sexting", "gooning", "jerk off", "wichsen", "leaked nudes",
         // Körper
         "ass", "butt", "pawg", "titties", "tits", "nackte", "nacktbilder", "nacktfotos",
         // Plattformen (auch in Suchanfragen, Teilen-Knöpfen und Länder-Adressen wie pinterest.ch)
@@ -146,6 +153,28 @@ public final class Filter {
     private final List<String> keywords = new ArrayList<>();
     private final Set<String> allowDomains = new LinkedHashSet<>();
     private final boolean blockMediaSearch;
+    private final boolean whitelistOnly;
+    private final Set<String> whitelist = new LinkedHashSet<>();
+    private final WordMatcher matcher;
+
+    /** Plattform-Namen: in Suchanfragen gesperrt, im Seiteninhalt aber normal (Fusszeilen, Teilen-Knöpfe). */
+    static final Set<String> PAGE_SCAN_IGNORE = new java.util.HashSet<>(Arrays.asList(
+        "youtube", "instagram", "tiktok", "facebook", "twitter", "snapchat", "reddit", "pinterest",
+        "tumblr", "9gag", "bereal", "doomscroll", "bh", "babe", "babes", "spicy pics", "butt", "ass",
+        "nue", "nues", "seins", "nudo", "anal", "escort", "hure", "minirock", "nylons", "underwear"
+    ));
+
+    /** Wörter, bei denen schon ein einziger Treffer im Seiteninhalt reicht. */
+    static final Set<String> PAGE_SCAN_STRONG = new java.util.HashSet<>(Arrays.asList(
+        "porn", "porno", "xxx", "nsfw", "hentai", "onlyfans", "fansly", "camsex", "camgirl",
+        "sexvideo", "sex video", "nacktbilder", "nacktfotos", "blowjob", "handjob", "cumshot",
+        "creampie", "gangbang", "nudify", "deepnude", "leaked nudes", "rule34", "milf", "pawg"
+    ));
+
+    /** Vorschlag für die Positivliste. */
+    public static final String DEFAULT_WHITELIST =
+        "alpenlan.com\nsrf.ch\nwikipedia.org\nwikimedia.org\nmeteoschweiz.admin.ch\nadmin.ch\n"
+        + "sbb.ch\nch.ch\npost.ch\ngithub.com\nproton.me\ngrapheneos.org\n";
 
     public Filter() { this(null, null, null, true); }
 
@@ -164,14 +193,27 @@ public final class Filter {
      *                      Gilt nicht für gesperrte Domains und nicht für Suchmaschinen.
      */
     public Filter(String extraDomains, String extraKeywords, String allowList, boolean blockMediaSearch) {
+        this(extraDomains, extraKeywords, allowList, blockMediaSearch, false, null);
+    }
+
+    /**
+     * @param whitelistOnly nur Seiten aus {@code whitelistText} (plus Suchmaschinen und Heimnetz) erlaubt
+     */
+    public Filter(String extraDomains, String extraKeywords, String allowList, boolean blockMediaSearch,
+                  boolean whitelistOnly, String whitelistText) {
         this.blockMediaSearch = blockMediaSearch;
+        this.whitelistOnly = whitelistOnly;
+        for (String d : lines(whitelistText)) {
+            String c = cleanDomain(d);
+            if (!c.isEmpty()) whitelist.add(c);
+        }
         for (String d : CORE_DOMAINS) domains.add(d);
         for (String d : lines(extraDomains)) domains.add(cleanDomain(d));
-        for (String k : CORE_KEYWORDS) keywords.add(norm(k));
+        keywords.addAll(CORE_KEYWORDS);
         for (String k : lines(extraKeywords)) {
-            String n = norm(k);
-            if (n.length() >= 2 && !keywords.contains(n)) keywords.add(n);
+            if (k.trim().length() >= 2 && !keywords.contains(k.trim())) keywords.add(k.trim());
         }
+        matcher = new WordMatcher(keywords);
         for (String d : lines(allowList)) {
             String c = cleanDomain(d);
             if (!c.isEmpty() && !isBlockedDomain(c) && searchEngineOf(c) == null) allowDomains.add(c);
@@ -217,7 +259,7 @@ public final class Filter {
 
         // 2. Gesperrte Wörter (in Host, Pfad und Suchanfrage, dekodiert)
         if (!isAllowListed(host)) {
-            String kw = keywordIn(url);
+            String kw = keywordIn(uri);
             if (kw != null) return Decision.block("Gesperrtes Wort: «" + kw + "»");
         }
 
@@ -226,7 +268,13 @@ public final class Filter {
             return Decision.block("Bilder- und Videosuche ist gesperrt");
         }
 
-        // 4. Suchmaschinen: SafeSearch erzwingen
+        // 4. Positivliste: nur erlaubte Seiten (Suchmaschinen und Heimnetz immer)
+        if (whitelistOnly && mainFrame && searchEngineOf(host) == null && !isLocalAddress(host)
+                && !inWhitelist(host)) {
+            return Decision.block("Nicht auf der Liste erlaubter Seiten");
+        }
+
+        // 5. Suchmaschinen: SafeSearch erzwingen
         if (mainFrame) {
             String safe = enforceSafeSearch(uri, host, url.trim());
             if (safe != null) return Decision.redirect(safe);
@@ -236,10 +284,41 @@ public final class Filter {
 
     /** Prüft einen Text, z. B. einen Seitentitel, auf gesperrte Wörter. */
     public String keywordInText(String text) {
-        if (text == null || text.isEmpty()) return null;
-        String n = norm(text);
-        for (String k : keywords) if (containsWord(n, k)) return k.trim();
+        return matcher.find(text);
+    }
+
+    /**
+     * Prüft den sichtbaren Text einer Seite. Gibt einen Sperrgrund zurück oder null.
+     * Gesperrt wird bei einem «starken» Wort, bei 2 verschiedenen Wörtern oder 3 Treffern insgesamt.
+     */
+    public String scanPage(String text) {
+        java.util.Map<String, Integer> hits = matcher.count(text, PAGE_SCAN_IGNORE);
+        if (hits.isEmpty()) return null;
+        int total = 0;
+        for (java.util.Map.Entry<String, Integer> e : hits.entrySet()) {
+            if (PAGE_SCAN_STRONG.contains(e.getKey())) return "Seiteninhalt: «" + e.getKey() + "»";
+            total += e.getValue();
+        }
+        if (hits.size() >= 2 || total >= 3) {
+            StringBuilder b = new StringBuilder("Seiteninhalt: ");
+            int n = 0;
+            for (String k : hits.keySet()) {
+                if (n++ == 3) break;
+                if (n > 1) b.append(", ");
+                b.append('«').append(k).append('»');
+            }
+            return b.toString();
+        }
         return null;
+    }
+
+    public boolean isSearchEngine(String host) { return host != null && searchEngineOf(cleanDomain(host)) != null; }
+
+    public boolean blocksMediaSearch() { return blockMediaSearch; }
+
+    private boolean inWhitelist(String host) {
+        for (String d : whitelist) if (host.equals(d) || host.endsWith("." + d)) return true;
+        return false;
     }
 
     // ---------------------------------------------------------------- Domains
@@ -265,9 +344,36 @@ public final class Filter {
 
     // ---------------------------------------------------------------- Wörter
 
-    private String keywordIn(String url) {
-        String decoded = url;
-        // Mehrfach dekodieren, um verschachtelte Kodierung (%2520 ...) aufzulösen
+    /** Parameter, die Suchbegriffe enthalten: werden immer vollständig geprüft. */
+    private static final Set<String> SEARCH_PARAMS = new java.util.HashSet<>(Arrays.asList(
+        "q", "p", "query", "search", "search_query", "s", "k", "keyword", "keywords", "text", "term",
+        "wd", "searchterm", "suche", "suchbegriff", "find", "oq", "as_q", "as_epq", "as_oq"));
+
+    /**
+     * Prüft eine Adresse auf gesperrte Wörter. Suchbegriffe werden vollständig geprüft;
+     * im Rest der Adresse werden zufällig aussehende Kennungen (z. B. «bH_ERri9cBSG») übersprungen,
+     * damit sie nicht zufällig ein gesperrtes Wort enthalten.
+     */
+    private String keywordIn(URI uri) {
+        StringBuilder text = new StringBuilder();
+        text.append(uri.getHost() == null ? "" : stripIds(uri.getHost()));
+        if (uri.getRawPath() != null) text.append(' ').append(stripIds(decode(uri.getRawPath())));
+        String q = uri.getRawQuery();
+        if (q != null) {
+            for (String part : q.split("&")) {
+                int eq = part.indexOf('=');
+                String name = decode(eq < 0 ? part : part.substring(0, eq)).toLowerCase(Locale.ROOT);
+                String value = eq < 0 ? "" : decode(part.substring(eq + 1));
+                text.append(' ').append(SEARCH_PARAMS.contains(name) ? value : stripIds(name + " " + value));
+            }
+        }
+        if (uri.getRawFragment() != null) text.append(' ').append(stripIds(decode(uri.getRawFragment())));
+        return matcher.find(text.toString());
+    }
+
+    /** Mehrfach dekodieren, um verschachtelte Kodierung (%2520 ...) aufzulösen. */
+    private static String decode(String s) {
+        String decoded = s;
         for (int i = 0; i < 3; i++) {
             String next;
             try {
@@ -278,66 +384,40 @@ public final class Filter {
             if (next.equals(decoded)) break;
             decoded = next;
         }
-        String n = norm(decoded);
-        for (String k : keywords) if (containsWord(n, k)) return k.trim();
-        return null;
+        return decoded;
     }
 
-    /**
-     * Vereinheitlicht Text: Kleinbuchstaben, Akzente weg, Trennzeichen zu Leerzeichen,
-     * typische Zahlen-Ersatzschreibweisen (p0rn, s3xy) zurückübersetzt.
-     */
-    static String norm(String s) {
-        String t = s.toLowerCase(Locale.ROOT)
-            .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss");
-        t = Normalizer.normalize(t, Normalizer.Form.NFKD).replaceAll("\\p{M}+", "");
-        StringBuilder b = new StringBuilder(t.length() + 2).append(' ');
-        boolean lastSpace = true;
+    /** Entfernt Kennungen wie «Gk0QfmFDGNuDe5Ps» oder «a3f9c0d2e1», lässt Wörter und Slugs stehen. */
+    static String stripIds(String s) {
+        StringBuilder out = new StringBuilder(s.length());
+        for (String t : s.split("[^\\p{L}\\p{N}_\\-$@!]+")) {
+            if (t.isEmpty() || isIdLike(t)) continue;
+            out.append(t).append(' ');
+        }
+        return out.toString();
+    }
+
+    static boolean isIdLike(String t) {
+        if (t.length() < 8) return false;
+        int upperInside = 0, switches = 0;
         for (int i = 0; i < t.length(); i++) {
             char c = t.charAt(i);
-            char m;
-            switch (c) {
-                case '0': m = 'o'; break;
-                case '1': m = 'i'; break;
-                case '3': m = 'e'; break;
-                case '4': m = 'a'; break;
-                case '5': m = 's'; break;
-                case '7': m = 't'; break;
-                case '@': m = 'a'; break;
-                case '$': m = 's'; break;
-                default: m = (Character.isLetterOrDigit(c)) ? c : ' ';
-            }
-            if (m == ' ') {
-                if (!lastSpace) b.append(' ');
-                lastSpace = true;
-            } else {
-                b.append(m);
-                lastSpace = false;
+            if (i > 0 && Character.isUpperCase(c) && t.charAt(i - 1) != '-' && t.charAt(i - 1) != '_') upperInside++;
+            if (i > 0) {
+                char p = t.charAt(i - 1);
+                if ((Character.isDigit(c) && Character.isLetter(p)) || (Character.isLetter(c) && Character.isDigit(p))) switches++;
             }
         }
-        if (!lastSpace) b.append(' ');
-        return b.toString();
-    }
-
-    /**
-     * Kurze Wörter (bis 4 Zeichen, z. B. «xxx», «r34», «milf») müssen als eigenes Wort
-     * vorkommen, damit z. B. «Sussex» oder «Pornografie-Debatte» korrekt behandelt werden.
-     * Längere Wörter gelten auch als Wortteil (z. B. «bikinifigur», «pornhub»).
-     * Ausnahme: «porn» gilt immer auch als Wortteil.
-     */
-    private static boolean containsWord(String normText, String normKeyword) {
-        String k = normKeyword.trim();
-        if (k.isEmpty()) return false;
-        // Stichwort und Text werden gleich normalisiert (r34 -> rea), passen also zusammen.
-        if (k.length() <= 4 && !k.equals("porn")) {
-            return normText.contains(" " + k + " ");
-        }
-        return normText.contains(k);
+        return upperInside >= 2 || switches >= 3;
     }
 
     // ---------------------------------------------------------------- Bildersuche
 
     private static boolean isMediaSearch(URI uri, String host) {
+        // Vorschaubilder der Suchmaschinen
+        if (host.startsWith("encrypted-tbn") && host.endsWith(".gstatic.com")) return true;
+        if (host.equals("th.bing.com") || host.endsWith(".mm.bing.net")) return true;
+        if (host.equals("external-content.duckduckgo.com") || host.equals("proxy.duckduckgo.com")) return true;
         Search s = searchEngineOf(host);
         String rawHost = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
         String path = uri.getRawPath() == null ? "" : uri.getRawPath();
@@ -356,7 +436,6 @@ public final class Filter {
             String ia = param(q, "ia"), iax = param(q, "iax");
             return "images".equals(ia) || "videos".equals(ia) || "images".equals(iax) || "videos".equals(iax);
         }
-        // Bildsuche-Dienste, die nur Bilder liefern
         return host.equals("lens.google.com") || host.endsWith(".lens.google.com")
             || host.equals("tineye.com") || host.endsWith(".tineye.com");
     }
@@ -537,5 +616,5 @@ public final class Filter {
     }
 
     public int domainCount() { return domains.size(); }
-    public int keywordCount() { return keywords.size(); }
+    public int keywordCount() { return matcher.size(); }
 }
