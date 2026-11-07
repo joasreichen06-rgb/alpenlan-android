@@ -127,6 +127,50 @@
             android:theme="@style/Theme.Alpenlan.Show"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
 
+        <!-- Alpenlan Browser: Browser mit fest eingebautem Filter und SafeSearch -->
+        <activity
+            android:name=".browser.BrowserActivity"
+            android:exported="true"
+            android:label="@string/browser_name"
+            android:icon="@mipmap/ic_browser"
+            android:roundIcon="@mipmap/ic_browser"
+            android:taskAffinity="ch.alpenlan.browser"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Alpenlan.Browser"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.APP_BROWSER" />
+            </intent-filter>
+            <!-- Damit er als Standard-Browser gewählt werden kann -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".browser.BrowserSettingsActivity"
+            android:exported="false"
+            android:taskAffinity="ch.alpenlan.browser"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Alpenlan.Browser"
+            android:windowSoftInputMode="adjustResize" />
+
         <receiver
             android:name=".reminders.ReminderReceiver"
             android:exported="true">
