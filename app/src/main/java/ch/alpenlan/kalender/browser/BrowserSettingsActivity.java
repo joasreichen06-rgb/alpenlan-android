@@ -213,7 +213,7 @@ public class BrowserSettingsActivity extends Activity {
 
         // --- Listen
         page.addView(label("Zusätzlich gesperrte Seiten"));
-        EditText domains = area(store.extraDomains(), "eine pro Zeile, z. B.\ntiktok.com\nreddit.com\nsnapchat.com");
+        EditText domains = area(store.extraDomains(), "eine pro Zeile, z. B.\nnetflix.com\n20min.ch");
         page.addView(domains);
         page.addView(space(18));
 
@@ -233,7 +233,7 @@ public class BrowserSettingsActivity extends Activity {
 
         // --- Fest eingebaut
         TextView coreInfo = text("Fest eingebaut und nicht abschaltbar: " + Filter.CORE_DOMAINS.size()
-            + " Seiten (YouTube, Instagram, Erwachsenen-Seiten, Umgehungs-Proxys, Suchmaschinen ohne SafeSearch) und "
+            + " Seiten (YouTube, Instagram, TikTok, Facebook, X, Reddit, Snapchat und weitere Social Media, Erwachsenen-Seiten, Umgehungs-Proxys, Suchmaschinen ohne SafeSearch) und "
             + Filter.CORE_KEYWORDS.size() + " Wörter.", MUTED, 13);
         page.addView(coreInfo);
         TextView showCore = text("Liste anzeigen", BLUE, 14);

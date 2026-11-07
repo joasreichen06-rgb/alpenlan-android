@@ -54,6 +54,18 @@ public final class Filter {
         "youtubei.googleapis.com", "youtubekids.com", "yt.be",
         // Instagram
         "instagram.com", "cdninstagram.com", "ig.me", "instagr.am",
+        // Social Media mit Endlos-Feed (Doomscroll)
+        "tiktok.com", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokv.com", "tiktokw.us", "vm.tiktok.com",
+        "facebook.com", "fb.com", "fb.watch", "fbcdn.net", "fbsbx.com", "facebook.net",
+        "x.com", "twitter.com", "twimg.com", "t.co", "threads.net", "threads.com",
+        "snapchat.com", "snap.com", "sc-cdn.net", "snapkit.com",
+        "reddit.com", "redd.it", "redditmedia.com", "redditstatic.com", "reddituploads.com",
+        "pinterest.com", "pinimg.com", "pin.it", "tumblr.com", "bsky.app", "bsky.social",
+        "9gag.com", "imgur.com", "ifunny.co", "vsco.co", "lemon8-app.com", "bereal.com",
+        "likee.video", "triller.co", "twitch.tv", "ttvnw.net", "jtvnw.net", "kick.com",
+        "rumble.com", "dailymotion.com", "dai.ly", "bilibili.com", "bilibili.tv", "douyin.com",
+        "kuaishou.com", "kwai.com", "weibo.com", "vk.com", "vk.ru", "ok.ru", "truthsocial.com",
+        "mastodon.social", "mastodon.online", "joinmastodon.org", "gettr.com", "gab.com",
         // Erwachsenen-Seiten
         "pornhub.com", "pornhub.org", "phncdn.com", "xvideos.com", "xvideos-cdn.com", "xnxx.com",
         "xhamster.com", "xhamster.desi", "xhcdn.com", "redtube.com", "youporn.com", "tube8.com",
@@ -99,7 +111,10 @@ public final class Filter {
         "brothel", "seitensprung", "sugar daddy", "sugardaddy", "camsex", "webcam girl",
         "feet pics", "foot fetish", "deepnude", "undress ai", "nudify", "clothoff",
         // Körper
-        "ass", "butt", "pawg", "titties", "tits", "nackte", "nacktbilder", "nacktfotos"
+        "ass", "butt", "pawg", "titties", "tits", "nackte", "nacktbilder", "nacktfotos",
+        // Plattformen (auch in Suchanfragen, Teilen-Knöpfen und Länder-Adressen wie pinterest.ch)
+        "tiktok", "facebook", "twitter", "snapchat", "reddit", "pinterest", "tumblr", "9gag",
+        "bereal", "doomscroll"
     ));
 
     /** Suchmaschinen, bei denen SafeSearch per Adresse erzwungen wird. */
@@ -135,14 +150,8 @@ public final class Filter {
     public Filter() { this(null, null, null, true); }
 
     /** Voreinstellung der änderbaren Liste (mit PIN entfernbar). */
-    public static final String DEFAULT_EXTRA_DOMAINS =
-        "# Soziale Netzwerke (mit PIN entfernbar)\n"
-        + "tiktok.com\ntiktokcdn.com\ntiktokv.com\nsnapchat.com\nreddit.com\nredd.it\n"
-        + "redditmedia.com\nredditstatic.com\ntumblr.com\npinterest.com\npinimg.com\n"
-        + "x.com\ntwitter.com\ntwimg.com\nthreads.net\nvsco.co\nimgur.com\n9gag.com\n";
-
-    public static final String DEFAULT_EXTRA_KEYWORDS =
-        "# Eigene Wörter, eins pro Zeile\ntiktok\nsnapchat\nreddit\n";
+    public static final String DEFAULT_EXTRA_DOMAINS = "";
+    public static final String DEFAULT_EXTRA_KEYWORDS = "";
 
     public Filter(String extraDomains, String extraKeywords, String allowList) {
         this(extraDomains, extraKeywords, allowList, true);
