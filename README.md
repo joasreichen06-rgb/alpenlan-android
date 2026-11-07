@@ -55,10 +55,12 @@ Code unter `light/`. Die Einstellungsseite ist in Compose, das Vollbild-Licht (`
 
 Fünftes App-Symbol in derselben APK: ein Browser mit fest eingebautem Filter. Weil alles in der App passiert, wirkt er gleich über WLAN, Mobilfunk und VPN.
 
-- **Jede Anfrage wird geprüft** (Seite, Bilder, Videos, Skripte, Service Worker). 99 Seiten sind fest gesperrt (YouTube, Instagram, Erwachsenen-Seiten, Übersetzungs-Proxys, Web-Archive, Suchmaschinen ohne SafeSearch), dazu 40 Wörter wie «bikini», «nackt», «youtube» – auch in Schreibweisen wie «B1k1n1».
+- **Jede Anfrage wird geprüft** (Seite, Bilder, Videos, Skripte, Service Worker). 99 Seiten sind fest gesperrt (YouTube, Instagram, Erwachsenen-Seiten, Übersetzungs-Proxys, Web-Archive, Suchmaschinen ohne SafeSearch), dazu 123 Wörter wie «bikini», «baywatch», «bademode», «topless», «youtube» – auch in Schreibweisen wie «B1k1n1».
 - **SafeSearch erzwungen** bei Google (`safe=active`), Bing (`adlt=strict`) und DuckDuckGo (`kp=1`).
 - **Einstellungen hinter PIN** (⋮ → Filter-Einstellungen): eigene Seiten, Wörter, Ausnahmen, Suchmaschine. Die fest eingebauten Listen lassen sich nicht entfernen.
-- **Nur HTTPS:** `http://`-Adressen werden auf `https://` umgestellt (wegen `network_security_config`).
+- **Bilder- und Videosuche gesperrt** (Google, Bing, DuckDuckGo), abschaltbar mit PIN. Soziale Netzwerke (TikTok, Reddit, X, Snapchat …) sind voreingestellt gesperrt und lassen sich mit PIN freigeben.
+- **Heimnetz:** Router, Proxmox, NAS usw. lassen sich per IP oder lokalem Namen öffnen (`192.168.1.1`, `proxmox:8006`, `fritz.box`). Unverschlüsselt erlaubt sind nur übliche Heimnetz-Bereiche (siehe `network_security_config.xml`), alle anderen `http://`-Adressen werden auf `https://` umgestellt. Selbst signierte Zertifikate werden nur im Heimnetz und nur nach Rückfrage akzeptiert.
+- **Netzwerk-Karte** auf der Startseite: Verbindungsart, eigene IP, Router (antippbar), DNS, privates DNS, VPN-Status und -IP, öffentliche IP auf Knopfdruck.
 - Keine APK-Downloads, keine Links in andere Apps ausser Telefon/E-Mail/SMS, kein Kamera-/Mikrofon-/Standortzugriff für Webseiten.
 
 Code unter `browser/` (Java), Start- und Sperrseite unter `assets/browser/`. Der Filter-Kern (`Filter.java`) hat keine Android-Abhängigkeiten und lässt sich mit reinem Java testen.

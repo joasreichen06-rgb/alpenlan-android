@@ -81,7 +81,25 @@ public final class Filter {
         "dessous", "unterwäsche", "erotik", "erotic", "sexy", "sex video", "sexvideo", "camgirl",
         "onlyfans", "fansly", "rule34", "r34", "milf", "boobs", "titten", "brüste", "busen",
         "stripper", "striptease", "playboy", "nipple", "nippel", "booty", "twerk", "thong",
-        "string tanga", "upskirt", "hot girls", "youtube", "instagram"
+        "string tanga", "upskirt", "hot girls", "youtube", "instagram",
+        // Bademode und Strand
+        "baywatch", "badeanzug", "badeanzuege", "bademode", "swimsuit", "swimwear", "beachwear",
+        "monokini", "tankini", "bikinimodel", "beach babe", "wet t shirt", "wet tshirt",
+        // Unterwäsche und Dessous
+        "reizwaesche", "negligee", "strapse", "panties", "panty", "hoeschen",
+        "victoria s secret", "victorias secret", "savage x fenty", "corsage",
+        "sports illustrated swimsuit", "yoga pants",
+        // Freizügig
+        "topless", "oben ohne", "nacktbaden", "fkk", "nudist", "naturist", "freikoerperkultur",
+        "cleavage", "dekollete", "busty", "hottie", "hotties", "pinup", "pin up", "glamour model",
+        "thirst trap", "lap dance", "stripclub", "strip club", "poledance girl",
+        // Sexuell
+        "sex", "sexual", "erotisch", "erotica", "porno", "pron", "fetish", "fetisch", "bdsm",
+        "kinky", "horny", "lewd", "ecchi", "ahegao", "escort", "callgirl", "hooker", "bordell",
+        "brothel", "seitensprung", "sugar daddy", "sugardaddy", "camsex", "webcam girl",
+        "feet pics", "foot fetish", "deepnude", "undress ai", "nudify", "clothoff",
+        // Körper
+        "ass", "butt", "pawg", "titties", "tits", "nackte", "nacktbilder", "nacktfotos"
     ));
 
     /** Suchmaschinen, bei denen SafeSearch per Adresse erzwungen wird. */
@@ -112,8 +130,23 @@ public final class Filter {
     private final Set<String> domains = new LinkedHashSet<>();
     private final List<String> keywords = new ArrayList<>();
     private final Set<String> allowDomains = new LinkedHashSet<>();
+    private final boolean blockMediaSearch;
 
-    public Filter() { this(null, null, null); }
+    public Filter() { this(null, null, null, true); }
+
+    /** Voreinstellung der änderbaren Liste (mit PIN entfernbar). */
+    public static final String DEFAULT_EXTRA_DOMAINS =
+        "# Soziale Netzwerke (mit PIN entfernbar)\n"
+        + "tiktok.com\ntiktokcdn.com\ntiktokv.com\nsnapchat.com\nreddit.com\nredd.it\n"
+        + "redditmedia.com\nredditstatic.com\ntumblr.com\npinterest.com\npinimg.com\n"
+        + "x.com\ntwitter.com\ntwimg.com\nthreads.net\nvsco.co\nimgur.com\n9gag.com\n";
+
+    public static final String DEFAULT_EXTRA_KEYWORDS =
+        "# Eigene Wörter, eins pro Zeile\ntiktok\nsnapchat\nreddit\n";
+
+    public Filter(String extraDomains, String extraKeywords, String allowList) {
+        this(extraDomains, extraKeywords, allowList, true);
+    }
 
     /**
      * @param extraDomains  zusätzliche Domains (eine pro Zeile)
@@ -121,7 +154,8 @@ public final class Filter {
      * @param allowList     Domains, auf denen Wörter NICHT geprüft werden (für Fehlalarme).
      *                      Gilt nicht für gesperrte Domains und nicht für Suchmaschinen.
      */
-    public Filter(String extraDomains, String extraKeywords, String allowList) {
+    public Filter(String extraDomains, String extraKeywords, String allowList, boolean blockMediaSearch) {
+        this.blockMediaSearch = blockMediaSearch;
         for (String d : CORE_DOMAINS) domains.add(d);
         for (String d : lines(extraDomains)) domains.add(cleanDomain(d));
         for (String k : CORE_KEYWORDS) keywords.add(norm(k));
@@ -178,7 +212,12 @@ public final class Filter {
             if (kw != null) return Decision.block("Gesperrtes Wort: «" + kw + "»");
         }
 
-        // 3. Suchmaschinen: SafeSearch erzwingen
+        // 3. Bilder- und Videosuche (dort ist SafeSearch am schwächsten)
+        if (blockMediaSearch && isMediaSearch(uri, host)) {
+            return Decision.block("Bilder- und Videosuche ist gesperrt");
+        }
+
+        // 4. Suchmaschinen: SafeSearch erzwingen
         if (mainFrame) {
             String safe = enforceSafeSearch(uri, host, url.trim());
             if (safe != null) return Decision.redirect(safe);
@@ -285,6 +324,66 @@ public final class Filter {
             return normText.contains(" " + k + " ");
         }
         return normText.contains(k);
+    }
+
+    // ---------------------------------------------------------------- Bildersuche
+
+    private static boolean isMediaSearch(URI uri, String host) {
+        Search s = searchEngineOf(host);
+        String rawHost = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        String path = uri.getRawPath() == null ? "" : uri.getRawPath();
+        String q = uri.getRawQuery();
+        if (s == Search.GOOGLE) {
+            if (rawHost.startsWith("images.")) return true;
+            if (path.startsWith("/imghp") || path.startsWith("/images")) return true;
+            String tbm = param(q, "tbm"), udm = param(q, "udm");
+            return "isch".equals(tbm) || "vid".equals(tbm) || "2".equals(udm) || "7".equals(udm);
+        }
+        if (s == Search.BING) {
+            return path.startsWith("/images") || path.startsWith("/videos");
+        }
+        if (s == Search.DDG) {
+            if (path.startsWith("/i.js") || path.startsWith("/v.js")) return true;
+            String ia = param(q, "ia"), iax = param(q, "iax");
+            return "images".equals(ia) || "videos".equals(ia) || "images".equals(iax) || "videos".equals(iax);
+        }
+        // Bildsuche-Dienste, die nur Bilder liefern
+        return host.equals("lens.google.com") || host.endsWith(".lens.google.com")
+            || host.equals("tineye.com") || host.endsWith(".tineye.com");
+    }
+
+    private static String param(String rawQuery, String name) {
+        if (rawQuery == null) return null;
+        for (String p : rawQuery.split("&")) {
+            int eq = p.indexOf('=');
+            if ((eq < 0 ? p : p.substring(0, eq)).equals(name)) return eq < 0 ? "" : p.substring(eq + 1);
+        }
+        return null;
+    }
+
+    // ---------------------------------------------------------------- Heimnetz
+
+    /** Router, Proxmox & Co.: private IP-Adressen und lokale Namen. */
+    public static boolean isLocalAddress(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase(Locale.ROOT);
+        if (h.startsWith("[")) h = h.substring(1, h.length() - 1);
+        if (h.equals("localhost") || h.equals("::1") || h.startsWith("fe80:") || h.startsWith("fd")
+                && h.contains(":")) return true;
+        if (!h.isEmpty() && !h.contains(".") && !h.contains(":")) return true;   // "proxmox", "router"
+        if (h.endsWith(".local") || h.endsWith(".lan") || h.endsWith(".home.arpa") || h.equals("fritz.box")
+                || h.endsWith(".fritz.box") || h.endsWith(".localdomain") || h.endsWith(".internal")) return true;
+        String[] p = h.split("\\.");
+        if (p.length != 4) return false;
+        int[] n = new int[4];
+        try {
+            for (int i = 0; i < 4; i++) { n[i] = Integer.parseInt(p[i]); if (n[i] < 0 || n[i] > 255) return false; }
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        return n[0] == 10 || n[0] == 127 || (n[0] == 192 && n[1] == 168)
+            || (n[0] == 172 && n[1] >= 16 && n[1] <= 31) || (n[0] == 169 && n[1] == 254)
+            || (n[0] == 100 && n[1] >= 64 && n[1] <= 127);   // Tailscale/CGNAT-VPN
     }
 
     // ---------------------------------------------------------------- SafeSearch

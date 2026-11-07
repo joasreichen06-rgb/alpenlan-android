@@ -21,19 +21,21 @@ final class Store {
 
     // ---------------------------------------------------------------- Filter
 
-    String extraDomains()  { return p.getString("domains", ""); }
-    String extraKeywords() { return p.getString("keywords", ""); }
+    String extraDomains()  { return p.getString("domains", Filter.DEFAULT_EXTRA_DOMAINS); }
+    String extraKeywords() { return p.getString("keywords", Filter.DEFAULT_EXTRA_KEYWORDS); }
     String allowList()     { return p.getString("allow", ""); }
     Filter.Engine engine() { return Filter.Engine.byName(p.getString("engine", "GOOGLE")); }
     boolean checkTitles()  { return p.getBoolean("titles", true); }
+    boolean blockMediaSearch() { return p.getBoolean("media", true); }
 
-    void saveFilter(String domains, String keywords, String allow, Filter.Engine engine, boolean titles) {
+    void saveFilter(String domains, String keywords, String allow, Filter.Engine engine, boolean titles,
+                    boolean media) {
         p.edit().putString("domains", domains).putString("keywords", keywords)
             .putString("allow", allow).putString("engine", engine.name())
-            .putBoolean("titles", titles).apply();
+            .putBoolean("titles", titles).putBoolean("media", media).apply();
     }
 
-    Filter buildFilter() { return new Filter(extraDomains(), extraKeywords(), allowList()); }
+    Filter buildFilter() { return new Filter(extraDomains(), extraKeywords(), allowList(), blockMediaSearch()); }
 
     // ---------------------------------------------------------------- PIN
 

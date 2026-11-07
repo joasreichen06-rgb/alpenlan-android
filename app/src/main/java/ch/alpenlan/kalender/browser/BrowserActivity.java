@@ -1,6 +1,7 @@
 package ch.alpenlan.kalender.browser;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.app.SearchManager;
 import android.content.ActivityNotFoundException;
@@ -10,7 +11,14 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.drawable.GradientDrawable;
+import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.RouteInfo;
 import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -31,6 +39,7 @@ import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.ServiceWorkerClient;
+import android.webkit.SslErrorHandler;
 import android.webkit.ServiceWorkerController;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
@@ -52,7 +61,11 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -75,6 +88,8 @@ public class BrowserActivity extends Activity {
     private static final Pattern SCHEME = Pattern.compile(
         "^([a-zA-Z][a-zA-Z0-9+.-]*://|(mailto|tel|sms|smsto|intent|javascript|data|about|file|market|blob):).*",
         Pattern.CASE_INSENSITIVE);
+    /** Einzelne Namen mit Port, z. B. "proxmox:8006", oder lokale Namen wie "router.local". */
+    private static final Pattern LOCALNAME = Pattern.compile("^[a-zA-Z0-9-]+(:\\d+)([/?#].*)?$");
     private static final Pattern HOSTLIKE = Pattern.compile(
         "^(localhost|\\d{1,3}(\\.\\d{1,3}){3}|[^\\s/]+\\.[a-zA-Z]{2,63}|[^\\s/]+\\.[a-zA-Z]{2,63}\\.?)(:\\d+)?([/?#].*)?$");
 
@@ -100,6 +115,8 @@ public class BrowserActivity extends Activity {
     private boolean clearHistoryOnLoad;
     private boolean refreshStartOnResume;
     private volatile String lastInterceptBlocked;
+    /** Heimnetz-Geräte, deren eigenes Zertifikat in dieser Sitzung bestätigt wurde. */
+    private final Set<String> trustedLocal = new HashSet<>();
 
     // ================================================================ Aufbau
 
@@ -333,8 +350,8 @@ public class BrowserActivity extends Activity {
         String url;
         if (SCHEME.matcher(text).matches() && !text.contains(" ")) {
             url = text;
-        } else if (HOSTLIKE.matcher(text).matches()) {
-            url = "https://" + text;
+        } else if (HOSTLIKE.matcher(text).matches() || LOCALNAME.matcher(text).matches()) {
+            url = (isLocalInput(text) ? localScheme(text) : "https://") + text;
         } else {
             url = engine.searchUrl(text);
         }
@@ -398,7 +415,8 @@ public class BrowserActivity extends Activity {
             .replace("{{ENGINE}}", engine.label)
             .replace("{{DOMAINS}}", String.valueOf(f.domainCount()))
             .replace("{{WORDS}}", String.valueOf(f.keywordCount()))
-            .replace("{{VERSION}}", BuildConfig.VERSION_NAME);
+            .replace("{{VERSION}}", BuildConfig.VERSION_NAME)
+            .replace("{{NET}}", networkHtml());
         web.loadDataWithBaseURL(START, html, "text/html", "UTF-8", START);
         showUrl(START);
     }
@@ -448,6 +466,105 @@ public class BrowserActivity extends Activity {
         String shown = url.replaceFirst("^https?://(www\\.)?", "");
         if (shown.endsWith("/")) shown = shown.substring(0, shown.length() - 1);
         bar.setText(shown);
+    }
+
+    // ================================================================ Netzwerk-Anzeige
+
+    /** Karte mit den aktuellen IP-Einstellungen für die Startseite. */
+    private String networkHtml() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            StringBuilder rows = new StringBuilder();
+            Network active = cm.getActiveNetwork();
+            if (active == null) return "<div class='net'><h2>NETZWERK</h2><div class='row'><span>Status</span><b>Keine Verbindung</b></div></div>";
+            boolean vpn = false;
+            NetworkCapabilities ac = cm.getNetworkCapabilities(active);
+            if (ac != null && ac.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) vpn = true;
+
+            @SuppressWarnings("deprecation")
+            Network[] all = cm.getAllNetworks();
+            Network lan = null;
+            String kind = "Unbekannt";
+            for (Network n : all) {
+                NetworkCapabilities c = cm.getNetworkCapabilities(n);
+                if (c == null || c.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue;
+                if (!c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue;
+                if (c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) { lan = n; kind = "WLAN"; break; }
+                if (c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) { lan = n; kind = "Ethernet"; break; }
+                if (c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) && lan == null) { lan = n; kind = "Mobilfunk"; }
+            }
+            if (lan == null && !vpn) lan = active;
+
+            rows.append(row("Verbindung", esc(kind) + (vpn ? " + VPN" : "")));
+            if (lan != null) {
+                LinkProperties lp = cm.getLinkProperties(lan);
+                if (lp != null) {
+                    rows.append(row("Meine IP", esc(ipv4(lp))));
+                    String gw = gateway(lp);
+                    if (gw != null) {
+                        rows.append(row("Router", "<a href='alpenlan://go?url=" + Uri.encode("http://" + gw)
+                            + "'>" + esc(gw) + " ›</a>"));
+                    }
+                    String dns = dns(lp);
+                    if (!dns.isEmpty()) rows.append(row("DNS", esc(dns)));
+                    if (lp.getPrivateDnsServerName() != null) {
+                        rows.append(row("Privates DNS", esc(lp.getPrivateDnsServerName())));
+                    }
+                }
+            }
+            if (vpn) {
+                LinkProperties vp = cm.getLinkProperties(active);
+                rows.append(row("VPN", "<span class='on'>aktiv</span>"));
+                if (vp != null) {
+                    rows.append(row("VPN-IP", esc(ipv4(vp))));
+                    String dns = dns(vp);
+                    if (!dns.isEmpty()) rows.append(row("VPN-DNS", esc(dns)));
+                }
+            } else {
+                rows.append(row("VPN", "aus"));
+            }
+            rows.append("<div class='row'><span>Öffentliche IP</span><b id='pub'><a href='#' onclick='pubIp();return false'>anzeigen</a></b></div>");
+            return "<div class='net'><h2>NETZWERK</h2>" + rows + "</div>";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static String row(String k, String v) {
+        return "<div class='row'><span>" + k + "</span><b>" + v + "</b></div>";
+    }
+
+    private static String ipv4(LinkProperties lp) {
+        StringBuilder b = new StringBuilder();
+        for (LinkAddress a : lp.getLinkAddresses()) {
+            if (a.getAddress() instanceof Inet4Address) {
+                if (b.length() > 0) b.append(", ");
+                b.append(a.getAddress().getHostAddress()).append('/').append(a.getPrefixLength());
+            }
+        }
+        if (b.length() == 0) {
+            for (LinkAddress a : lp.getLinkAddresses()) {
+                if (!a.getAddress().isLinkLocalAddress()) { b.append(a.getAddress().getHostAddress()); break; }
+            }
+        }
+        return b.length() == 0 ? "–" : b.toString();
+    }
+
+    private static String gateway(LinkProperties lp) {
+        for (RouteInfo r : lp.getRoutes()) {
+            InetAddress g = r.getGateway();
+            if (r.isDefaultRoute() && g instanceof Inet4Address && !g.isAnyLocalAddress()) return g.getHostAddress();
+        }
+        return null;
+    }
+
+    private static String dns(LinkProperties lp) {
+        StringBuilder b = new StringBuilder();
+        for (InetAddress d : lp.getDnsServers()) {
+            if (b.length() > 0) b.append(", ");
+            b.append(d.getHostAddress());
+        }
+        return b.toString();
     }
 
     // ================================================================ WebView-Hooks
@@ -508,6 +625,26 @@ public class BrowserActivity extends Activity {
                     view.loadUrl(d.url);
                 }
             }
+        }
+
+        /** Selbst signierte Zertifikate: nur bei Geräten im Heimnetz, und nur nach Rückfrage. */
+        @Override
+        public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+            String host = Uri.parse(error.getUrl()).getHost();
+            if (host == null || !Filter.isLocalAddress(host)) {
+                handler.cancel();
+                toast("Unsichere Verbindung abgebrochen");
+                return;
+            }
+            if (trustedLocal.contains(host)) { handler.proceed(); return; }
+            new AlertDialog.Builder(BrowserActivity.this)
+                .setTitle("Gerät im Heimnetz")
+                .setMessage(host + " hat ein eigenes Zertifikat (normal bei Router, Proxmox, NAS). "
+                    + "Trotzdem verbinden?")
+                .setPositiveButton("Verbinden", (d, w) -> { trustedLocal.add(host); handler.proceed(); })
+                .setNegativeButton("Abbrechen", (d, w) -> handler.cancel())
+                .setOnCancelListener(d -> handler.cancel())
+                .show();
         }
 
         @Override
@@ -736,6 +873,22 @@ public class BrowserActivity extends Activity {
 
     // ================================================================ Hilfen
 
+    private static boolean isLocalInput(String text) {
+        String host = text.split("[/:?#]", 2)[0];
+        return Filter.isLocalAddress(host) || !host.contains(".");
+    }
+
+    /** Proxmox (8006) und andere typische HTTPS-Ports bekommen https, sonst http. */
+    private static String localScheme(String text) {
+        java.util.regex.Matcher m = Pattern.compile("^[^/:?#]+:(\\d+)").matcher(text);
+        if (m.find()) {
+            String port = m.group(1);
+            if (port.equals("443") || port.equals("8006") || port.equals("8443") || port.equals("9443")
+                    || port.equals("5001") || port.equals("8007")) return "https://";
+        }
+        return "http://";
+    }
+
     /** Systemleisten + Tastatur (+ Kamera-Aussparung), auch auf Android 10. */
     static Insets systemInsets(WindowInsets insets) {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -776,7 +929,7 @@ public class BrowserActivity extends Activity {
         if (url == null || !url.regionMatches(true, 0, "http://", 0, 7)) return url;
         String rest = url.substring(7);
         String host = rest.split("[/:?#]", 2)[0].toLowerCase(Locale.ROOT);
-        if (host.equals("192.168.1.212") || host.equals("localhost")) return url;
+        if (Filter.isLocalAddress(host)) return url;   // Router, Proxmox & Co. im Heimnetz
         return "https://" + rest;
     }
 

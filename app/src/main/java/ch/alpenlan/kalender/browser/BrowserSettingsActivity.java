@@ -199,6 +199,16 @@ public class BrowserSettingsActivity extends Activity {
         titles.setPadding(dp(14), dp(12), dp(14), dp(12));
         titles.setBackground(round(CARD, dp(14), LINE));
         page.addView(titles);
+        page.addView(space(10));
+
+        Switch media = new Switch(this);
+        media.setText("Bilder- und Videosuche sperren (Google, Bing, DuckDuckGo)");
+        media.setTextColor(FG);
+        media.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        media.setChecked(store.blockMediaSearch());
+        media.setPadding(dp(14), dp(12), dp(14), dp(12));
+        media.setBackground(round(CARD, dp(14), LINE));
+        page.addView(media);
         page.addView(space(18));
 
         // --- Listen
@@ -247,7 +257,7 @@ public class BrowserSettingsActivity extends Activity {
             View checked = engines.findViewById(engines.getCheckedRadioButtonId());
             if (checked != null && checked.getTag() instanceof Filter.Engine) e = (Filter.Engine) checked.getTag();
             store.saveFilter(domains.getText().toString(), words.getText().toString(),
-                allow.getText().toString(), e, titles.isChecked());
+                allow.getText().toString(), e, titles.isChecked(), media.isChecked());
             Filter f = store.buildFilter();
             toast("Gespeichert: " + f.domainCount() + " Seiten, " + f.keywordCount() + " Wörter gesperrt");
             finish();
