@@ -37,7 +37,7 @@ import static ch.alpenlan.kalender.browser.BrowserActivity.round;
  */
 public class BrowserSettingsActivity extends Activity {
 
-    private static final int MIN_PIN = 6;
+    private static final int MIN_PIN = 4;
     private static final int MUTED_DIM = android.graphics.Color.rgb(84, 96, 114);
 
     private Store store;
@@ -126,7 +126,7 @@ public class BrowserSettingsActivity extends Activity {
             String p1 = a.getText().toString(), p2 = b.getText().toString();
             if (p1.length() < MIN_PIN) { toast("Mindestens " + MIN_PIN + " Ziffern"); return; }
             if (!p1.equals(p2)) { toast("Die beiden PINs stimmen nicht überein"); b.setText(""); return; }
-            if (isWeak(p1)) { toast("Zu einfach (z. B. 123456 oder 111111). Bitte anderen PIN wählen."); return; }
+            if (isWeak(p1)) { toast("Zu einfach (z. B. 1234 oder 1111). Bitte anderen PIN wählen."); return; }
             store.setPin(p1);
             toast("PIN gespeichert");
             showSettings();
