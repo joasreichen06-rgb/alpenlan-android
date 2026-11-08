@@ -265,6 +265,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
     var overlay by remember { mutableStateOf<Int?>(null) }
     var overlayStamp by remember { mutableLongStateOf(0L) }
     var armed by remember { mutableStateOf<String?>(null) }
+    var armedAction by remember { mutableStateOf("") }   // was der zweite Druck bestätigt
     val camFull = remember { mutableStateOf(false) }
     val pages = remember(m.shelly.map { it.key to it.name }) { PAGES + listOfNotNull(stromPage(m)) }
     val p = pages[page.coerceIn(0, pages.lastIndex)]
@@ -292,7 +293,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
                 val c = m.shelly.firstOrNull { it.key == a.removePrefix("shelly:") }
                 when {
                     c == null || !c.ok -> vm.info("Shelly nicht erreichbar")
-                    c.confirm && c.on && armed != armKey -> { armed = armKey; vm.info("Nochmal drücken: ${c.name} ausschalten") }
+                    c.confirm && c.on && armed != armKey -> { armed = armKey; armedAction = a; vm.info("Nochmal drücken: ${c.name} ausschalten") }
                     else -> {
                         armed = null
                         vm.act("shelly_toggle", c.key, optimistic = { mm -> mm.copy(shelly = mm.shelly.map { if (it.key == c.key) it.copy(on = !it.on) else it }) },
@@ -316,7 +317,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
             }
             a == "prn_cancel" -> {
                 if (m.printer.state != "printing" && m.printer.state != "paused") { vm.info("Kein Druck aktiv"); return }
-                if (armKey != null && armed != armKey) { armed = armKey; vm.info("Nochmal drücken zum Abbrechen"); return }
+                if (armKey != null && armed != armKey) { armed = armKey; armedAction = a; vm.info("Nochmal drücken zum Abbrechen"); return }
                 armed = null
                 vm.act("prn_cancel", msg = "Druck abgebrochen")
             }
@@ -329,7 +330,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
     fun fireKey(i: Int, hold: Boolean) {
         val k = p.keys[i]
         val id = "${p.id}:$i"
-        if (armed == id) { perform("prn_cancel", armKey = id); return }
+        if (armed == id) { perform(armedAction, armKey = id); return }
         val a = if (hold) k.hold else k.action
         if (a.isEmpty()) return
         if (hold) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
