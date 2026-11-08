@@ -31,9 +31,11 @@ data class Proxmox(
 )
 data class Service(val name: String, val ok: Boolean, val ms: Int?)
 data class Event(val time: String, val src: String, val msg: String)
+data class ShellyChannel(val key: String, val name: String, val icon: String, val confirm: Boolean, val ok: Boolean, val on: Boolean, val power: Double?, val energyWh: Double?)
 data class ControlModel(
     val haConnected: Boolean, val pc: Pc, val avr: Avr, val printer: Printer,
     val proxmox: Proxmox?, val services: List<Service>, val events: List<Event>,
+    val shelly: List<ShellyChannel> = emptyList(), val shellyPower: Double? = null,
 )
 
 private fun JSONObject.dbl(k: String): Double? = if (isNull(k) || !has(k)) null else optDouble(k).takeIf { !it.isNaN() }
@@ -82,6 +84,11 @@ fun parseModel(j: JSONObject): ControlModel {
         },
         services = srv?.optJSONArray("services").list { Service(it.optString("name"), it.optBoolean("ok"), if (it.isNull("ms")) null else it.optInt("ms")) },
         events = j.optJSONArray("events").list { Event(it.optString("t"), it.optString("src"), it.optString("msg")) },
+        shelly = j.optJSONObject("shelly")?.optJSONArray("channels").list {
+            ShellyChannel(it.optString("key"), it.optString("name"), it.optString("icon", "light"), it.optBoolean("confirm"),
+                it.optBoolean("ok"), it.optBoolean("on"), it.dbl("power"), it.dbl("energy_wh"))
+        },
+        shellyPower = j.optJSONObject("shelly")?.dbl("power"),
     )
 }
 

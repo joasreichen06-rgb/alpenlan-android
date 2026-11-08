@@ -105,6 +105,11 @@ private val PAGES = listOf(
     )),
 )
 
+private fun stromPage(m: ControlModel): DPage? {
+    if (m.shelly.isEmpty()) return null
+    return DPage("strom", "Strom", m.shelly.take(9).map { DKey(it.name, it.icon, "shelly:${it.key}", kind = "shelly") }, emptyList())
+}
+
 private val STEP_DP = mapOf("vol_step" to 6f, "prn_speed" to 9f, "prn_flow" to 9f, "prn_fan" to 12f, "prn_zoff" to 14f)
 
 // ------------------------------------------------------------------ Farben und Symbole
@@ -202,6 +207,14 @@ private fun lookOf(k: DKey, m: ControlModel, armed: Boolean): KeyLook {
             if (bad == 0) KeyLook(DC.green, k.label, "alles ok") else KeyLook(DC.amber, k.label, "$bad Störung")
         }
         "back" -> KeyLook(DC.black, k.label, "")
+        "shelly" -> {
+            val c = m.shelly.firstOrNull { it.key == k.action.removePrefix("shelly:") }
+            when {
+                c == null || !c.ok -> KeyLook(DC.black, k.label, "offline")
+                c.on -> KeyLook(DC.green, k.label, "Ein · ${(c.power ?: 0.0).roundToInt()} W")
+                else -> KeyLook(DC.slate, k.label, "Aus")
+            }
+        }
         else -> KeyLook(DC.slate, k.label, "")
     }
 }
@@ -253,7 +266,8 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
     var overlayStamp by remember { mutableLongStateOf(0L) }
     var armed by remember { mutableStateOf<String?>(null) }
     val camFull = remember { mutableStateOf(false) }
-    val p = PAGES[page.coerceIn(0, PAGES.lastIndex)]
+    val pages = remember(m.shelly.map { it.key to it.name }) { PAGES + listOfNotNull(stromPage(m)) }
+    val p = pages[page.coerceIn(0, pages.lastIndex)]
     // Während des Ziehens zeigt die App den eigenen Wert, bis Control nachgezogen hat
     var volOverride by remember { mutableStateOf<Int?>(null) }
     var volStamp by remember { mutableLongStateOf(0L) }
@@ -263,17 +277,29 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
     LaunchedEffect(overlayStamp) { if (overlay != null) { delay(1800); overlay = null } }
     LaunchedEffect(armed) { if (armed != null) { delay(2500); armed = null } }
 
-    fun goPage(i: Int) { page = (i + PAGES.size) % PAGES.size; overlay = null }
+    fun goPage(i: Int) { page = (i + pages.size) % pages.size; overlay = null }
     fun showOverlay(i: Int) { overlay = i; overlayStamp = System.nanoTime() }
 
     fun perform(a: String, dir: Int = 1, armKey: String? = null) {
         when {
             a.isEmpty() -> Unit
-            a.startsWith("page:") -> PAGES.indexOfFirst { it.id == a.removePrefix("page:") }.takeIf { it >= 0 }?.let { goPage(it) }
+            a.startsWith("page:") -> pages.indexOfFirst { it.id == a.removePrefix("page:") }.takeIf { it >= 0 }?.let { goPage(it) }
             a == "tab:apps" -> vm.setTab(HomeTab.APPS)
             a == "tab:server" -> vm.setTab(HomeTab.SERVER)
             a.startsWith("info:") -> vm.info(a.removePrefix("info:"))
             a == "licht" -> vm.info("Licht ist noch nicht eingerichtet – kommt mit DMX")
+            a.startsWith("shelly:") -> {
+                val c = m.shelly.firstOrNull { it.key == a.removePrefix("shelly:") }
+                when {
+                    c == null || !c.ok -> vm.info("Shelly nicht erreichbar")
+                    c.confirm && c.on && armed != armKey -> { armed = armKey; vm.info("Nochmal drücken: ${c.name} ausschalten") }
+                    else -> {
+                        armed = null
+                        vm.act("shelly_toggle", c.key, optimistic = { mm -> mm.copy(shelly = mm.shelly.map { if (it.key == c.key) it.copy(on = !it.on) else it }) },
+                            msg = "${c.name} ${if (c.on) "aus" else "ein"}")
+                    }
+                }
+            }
             a == "pc_toggle" -> vm.pcToggle()
             a == "input_step" -> vm.act("input_step", dir, optimistic = { it.copy(avr = it.avr.copy(on = true)) },
                 msg = if (!m.avr.on) "Anlage ein" else null)
@@ -307,12 +333,12 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
         val a = if (hold) k.hold else k.action
         if (a.isEmpty()) return
         if (hold) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        perform(a, armKey = if (a == "prn_cancel") id else null)
+        perform(a, armKey = if (a == "prn_cancel" || a.startsWith("shelly:")) id else null)
     }
 
     // Seiten-Reiter
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        PAGES.forEachIndexed { i, q ->
+        pages.forEachIndexed { i, q ->
             val on = i == page
             Box(
                 Modifier.height(34.dp).clip(RoundedCornerShape(17.dp))
@@ -377,7 +403,24 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
     }
 
     // Unter dem Deck: Kamera auf der Drucker-Seite, sonst die Kurzübersicht
-    if (p.id == "drucker" && m.printer.camera) {
+    if (p.id == "strom") {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(A.panel.copy(alpha = 0.9f))
+                .border(1.dp, A.line, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Mono("Leistung jetzt", size = 9, spacing = 1.0)
+            Text("${(m.shellyPower ?: 0.0).roundToInt()} W", color = A.fg, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+            m.shelly.forEach { c ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(if (!c.ok) Color(0xFF5A6B88) else if (c.on) A.ok else Color(0xFF5A6B88)))
+                    Spacer(Modifier.width(8.dp))
+                    Text(c.name, color = A.fg2, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text(if (!c.ok) "offline" else if (c.on) "${(c.power ?: 0.0).roundToInt()} W" else "aus", color = A.fg, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    } else if (p.id == "drucker" && m.printer.camera) {
         CameraView(s, camFull)
         if (m.printer.file.isNotBlank()) Mono(m.printer.file, size = 10, spacing = 0.4)
     } else {
