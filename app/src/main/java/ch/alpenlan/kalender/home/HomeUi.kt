@@ -280,7 +280,7 @@ private fun Overview(s: HomeState, vm: HomeViewModel) {
     val servicesOk = m?.services?.count { it.ok } ?: 0
     val servicesAll = m?.services?.size ?: 0
     val guestsUp = px?.guests?.count { it.status == "running" } ?: 0
-    val problems = (servicesAll - servicesOk) + ((px?.guests?.size ?: 0) - guestsUp)
+    val problems = (servicesAll - servicesOk) + ((px?.guests?.size ?: 0) - guestsUp) + (if (m?.ups?.onBattery == true) 1 else 0)
     Text(
         "$greet${name?.let { ", $it" } ?: ""}. " + when {
             m == null -> "Verbinde mit Alpenlan …"
@@ -290,6 +290,7 @@ private fun Overview(s: HomeState, vm: HomeViewModel) {
         },
         color = A.muted, fontSize = 14.sp,
     )
+    m?.ups?.takeIf { it.onBattery || !it.ok }?.let { UpsCard(it) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Health("Dienste", if (servicesAll == 0) "–" else "$servicesOk / $servicesAll", servicesAll > 0 && servicesOk == servicesAll)
         val guestsAll = px?.guests?.size ?: 0
@@ -462,6 +463,7 @@ private fun Server(s: HomeState, vm: HomeViewModel) {
             }
         }
     }
+    m.ups?.let { UpsCard(it) }
     if (m.services.isNotEmpty()) {
         Card {
             Mono("Dienste", color = A.blue)
@@ -483,6 +485,28 @@ private fun Server(s: HomeState, vm: HomeViewModel) {
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun UpsCard(u: Ups) {
+    val mins = u.runtimeS?.let { "${(it / 60).roundToInt()} min" } ?: "–"
+    Card {
+        when {
+            !u.ok -> CardHead("USV", A.warn, "keine Verbindung")
+            u.onBattery -> CardHead("Stromausfall · USV", A.warn, if (u.low) "fährt herunter" else "auf Batterie")
+            else -> CardHead("USV", GREEN, if (u.charging) "Netz · lädt" else "Netz")
+        }
+        if (u.ok) {
+            val ch = u.charge ?: 0.0
+            Meter("Batterie", "${ch.roundToInt()} %", (ch / 100).toFloat(), if (u.onBattery || ch < 50) A.warn else GREEN)
+            Meter("Last", "${(u.load ?: 0.0).roundToInt()} %", ((u.load ?: 0.0) / 100).toFloat(), A.blue)
+            Text(
+                if (u.onBattery) "Reicht noch ca. $mins. Der Server fährt rechtzeitig selbst herunter und startet wieder, sobald Strom da ist."
+                else "Reserve bei Stromausfall: ca. $mins" + (u.model.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                color = if (u.onBattery) A.warn else A.muted, fontSize = 13.sp,
+            )
         }
     }
 }
