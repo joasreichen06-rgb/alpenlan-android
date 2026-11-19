@@ -34,11 +34,16 @@ data class Event(val time: String, val src: String, val msg: String)
 data class ShellyChannel(val key: String, val name: String, val icon: String, val confirm: Boolean, val ok: Boolean, val on: Boolean, val power: Double?, val energyWh: Double?)
 data class Ups(val ok: Boolean, val model: String, val onBattery: Boolean, val low: Boolean, val charging: Boolean,
                val charge: Double?, val runtimeS: Double?, val load: Double?)
+data class PhysDisk(val dev: String, val model: String, val type: String, val size: Double, val health: String, val wearout: Int?,
+                    val temp: Int?, val hours: Int?, val verdict: String, val reasons: List<String>)
+data class DiskInfo(val ok: Boolean, val error: String?, val disks: List<PhysDisk>)
 data class ControlModel(
     val haConnected: Boolean, val pc: Pc, val avr: Avr, val printer: Printer,
     val proxmox: Proxmox?, val services: List<Service>, val events: List<Event>,
     val shelly: List<ShellyChannel> = emptyList(), val shellyPower: Double? = null,
     val ups: Ups? = null,
+    val disks: DiskInfo? = null,
+    val pushDevices: Int = 0,
 )
 
 private fun JSONObject.dbl(k: String): Double? = if (isNull(k) || !has(k)) null else optDouble(k).takeIf { !it.isNaN() }
@@ -92,6 +97,15 @@ fun parseModel(j: JSONObject): ControlModel {
                 it.optBoolean("ok"), it.optBoolean("on"), it.dbl("power"), it.dbl("energy_wh"))
         },
         shellyPower = j.optJSONObject("shelly")?.dbl("power"),
+        disks = j.optJSONObject("disks")?.takeIf { it.optBoolean("configured") }?.let { d ->
+            DiskInfo(d.optBoolean("ok"), d.optString("error").takeIf { e -> e.isNotBlank() && e != "null" },
+                d.optJSONArray("disks").list {
+                    PhysDisk(it.optString("dev"), it.optString("model"), it.optString("type"), it.optDouble("size", 0.0), it.optString("health"),
+                        it.dbl("wearout")?.toInt(), it.dbl("temp")?.toInt(), it.dbl("hours")?.toInt(), it.optString("verdict", "ok"),
+                        it.optJSONArray("reasons")?.let { r -> (0 until r.length()).map { i -> r.optString(i) } } ?: emptyList())
+                })
+        },
+        pushDevices = j.optJSONObject("push")?.optInt("devices") ?: 0,
         ups = j.optJSONObject("ups")?.takeIf { it.optBoolean("configured") }?.let {
             Ups(it.optBoolean("ok"), it.optString("model"), it.optBoolean("on_battery"), it.optBoolean("low"), it.optBoolean("charging"),
                 it.dbl("charge"), it.dbl("runtime_s"), it.dbl("load"))
@@ -143,6 +157,18 @@ class ControlApi(private val auth: Auth) {
                 if (c.responseCode !in 200..299) throw Exception("Control antwortet mit ${c.responseCode}")
                 parseModel(JSONObject(c.inputStream.bufferedReader().use { it.readText() }))
             } finally { c.disconnect() }
+        }
+    }
+
+    suspend fun registerPush(endpoint: String): Boolean = post("/app/v1/push", JSONObject().put("endpoint", endpoint).toString())
+    suspend fun pushTest(): Boolean = post("/app/v1/push/test", "{}")
+
+    private suspend fun post(path: String, body: String): Boolean {
+        val c = open(path, "POST", body)
+        return withContext(Dispatchers.IO) {
+            try {
+                c.responseCode in 200..299 && JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optBoolean("ok")
+            } catch (_: Exception) { false } finally { c.disconnect() }
         }
     }
 

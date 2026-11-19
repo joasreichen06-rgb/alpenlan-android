@@ -189,6 +189,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val m = api.state()
             _s.update { it.copy(model = m, offline = null, updatedAt = System.currentTimeMillis()) }
+            ch.alpenlan.kalender.push.PushSetup.sync(getApplication())
         } catch (e: AuthError) {
             _s.update { it.copy(offline = e.message, loggedIn = auth.loggedIn) }
             if (!auth.loggedIn) pollJob?.cancel()
@@ -226,6 +227,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             if (!ok) toast("Befehl wurde nicht ausgeführt") else if (msg != null) toast(msg)
             delay(400)
             refresh()
+        }
+    }
+
+    fun pushTest() {
+        viewModelScope.launch {
+            val ok = runCatching { api.pushTest() }.getOrDefault(false)
+            toast(if (ok) "Test gesendet – kommt gleich als Benachrichtigung" else "Test konnte nicht gesendet werden")
         }
     }
 

@@ -182,6 +182,14 @@
             </intent-filter>
         </receiver>
 
+        <service
+            android:name=".push.AlpenlanPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".reminders.AlarmReceiver"
             android:exported="false" />

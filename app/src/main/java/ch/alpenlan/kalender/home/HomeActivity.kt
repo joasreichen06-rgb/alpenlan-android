@@ -11,6 +11,7 @@ import ch.alpenlan.kalender.ui.AlpenlanTheme
 
 class HomeActivity : ComponentActivity() {
     private val vm: HomeViewModel by viewModels()
+    private val notifPermission = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -20,6 +21,10 @@ class HomeActivity : ComponentActivity() {
         )
         handle(intent)
         setContent { AlpenlanTheme { HomeApp(vm) } }
+        runCatching { ch.alpenlan.kalender.push.PushSetup.start(this) }
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
 
     override fun onNewIntent(intent: Intent) {

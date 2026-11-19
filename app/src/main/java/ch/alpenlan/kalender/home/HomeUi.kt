@@ -464,6 +464,7 @@ private fun Server(s: HomeState, vm: HomeViewModel) {
         }
     }
     m.ups?.let { UpsCard(it) }
+    m.disks?.let { DisksCard(it) }
     if (m.services.isNotEmpty()) {
         Card {
             Mono("Dienste", color = A.blue)
@@ -485,6 +486,68 @@ private fun Server(s: HomeState, vm: HomeViewModel) {
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
+        }
+    }
+    PushCard(m, vm)
+}
+
+@Composable
+private fun DisksCard(d: DiskInfo) {
+    Card {
+        val worst = d.disks.maxByOrNull { when (it.verdict) { "replace" -> 2; "watch" -> 1; else -> 0 } }?.verdict
+        CardHead(
+            "Festplatten", if (!d.ok) A.warn else when (worst) { "replace" -> A.redSoft; "watch" -> A.warn; else -> GREEN },
+            if (!d.ok) "keine Daten" else when (worst) { "replace" -> "ersetzen"; "watch" -> "beobachten"; else -> "gesund" },
+        )
+        if (!d.ok) Text(d.error ?: "Noch keine Daten – Control liest die Platten alle 30 Minuten.", color = A.warn, fontSize = 13.sp)
+        d.disks.forEach { k ->
+            val col = when (k.verdict) { "replace" -> A.redSoft; "watch" -> A.warn; else -> GREEN }
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(A.panel2).padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(col))
+                    Spacer(Modifier.width(8.dp))
+                    Text(k.model, color = A.fg, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(
+                        when (k.verdict) { "replace" -> "ERSETZEN"; "watch" -> "BEOBACHTEN"; else -> "OK" },
+                        style = MonoLabel.copy(fontSize = 11.sp, color = col),
+                    )
+                }
+                Text(
+                    listOfNotNull(
+                        k.dev.removePrefix("/dev/"), k.type.uppercase().ifBlank { null }, gb(k.size),
+                        k.temp?.let { "$it °C" }, k.hours?.let { if (it >= 8760) "%.1f Jahre".format(it / 8760.0).replace('.', ',') else "$it h" },
+                    ).joinToString(" · "),
+                    style = MonoLabel.copy(fontSize = 11.sp, letterSpacing = 0.sp, color = A.muted),
+                )
+                k.wearout?.let { w -> Meter("Lebensdauer übrig", "$w %", w / 100f, if (w <= 10) A.redSoft else if (w <= 30) A.warn else GREEN) }
+                if (k.reasons.isNotEmpty()) Text(k.reasons.joinToString(" · "), color = col, fontSize = 12.sp)
+            }
+        }
+        if (d.ok && d.disks.isNotEmpty()) Hint("SMART-Werte aus dem N5. Bei „ersetzen“ zuerst Backup prüfen, dann die Platte tauschen.")
+    }
+}
+
+@Composable
+private fun PushCard(m: ControlModel, vm: HomeViewModel) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val st = ch.alpenlan.kalender.push.PushSetup.status(ctx)
+    val reg = ch.alpenlan.kalender.push.PushSetup.registered(ctx)
+    Card {
+        CardHead("Benachrichtigungen", if (reg) GREEN else A.warn, if (reg) "aktiv" else "nicht eingerichtet")
+        Text(
+            when {
+                reg -> "Stromausfall, Strom zurück und Festplatten-Probleme kommen als Push aufs Handy. Angemeldete Geräte: ${m.pushDevices}."
+                st == false -> "Für Push ohne Google braucht es eine Verteiler-App: „ntfy“ aus F-Droid oder dem Play Store installieren, danach diese App neu öffnen."
+                else -> "Wird eingerichtet … falls das so bleibt: ntfy installieren und die App neu öffnen."
+            },
+            color = A.muted, fontSize = 13.sp,
+        )
+        if (reg) {
+            Text("Test senden", color = A.blueLight, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { vm.pushTest() }.padding(vertical = 6.dp))
         }
     }
 }

@@ -71,4 +71,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     // Alpenlan Light: WebSocket zum Licht-Server
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Push-Nachrichten ohne Google (Verteiler z. B. ntfy)
+    implementation("org.unifiedpush.android:connector:3.0.10")
 }
