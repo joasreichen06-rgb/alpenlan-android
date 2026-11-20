@@ -506,6 +506,10 @@ private fun DisksCard(d: DiskInfo) {
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(A.panel2).padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                if (k.bay.isNotBlank()) Text(
+                    if (k.bay == "intern") "INTERN · M.2" else k.bay.uppercase(),
+                    style = MonoLabel.copy(fontSize = 11.sp, color = A.blueLight),
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(col))
                     Spacer(Modifier.width(8.dp))
@@ -517,7 +521,8 @@ private fun DisksCard(d: DiskInfo) {
                 }
                 Text(
                     listOfNotNull(
-                        k.dev.removePrefix("/dev/"), k.type.uppercase().ifBlank { null }, gb(k.size),
+                        k.serial.takeIf { it.isNotBlank() }?.let { "SN " + it.removePrefix("WD-") }, k.dev.removePrefix("/dev/"),
+                        k.type.uppercase().ifBlank { null }, gb(k.size),
                         k.temp?.let { "$it °C" }, k.hours?.let { if (it >= 8760) "%.1f Jahre".format(it / 8760.0).replace('.', ',') else "$it h" },
                     ).joinToString(" · "),
                     style = MonoLabel.copy(fontSize = 11.sp, letterSpacing = 0.sp, color = A.muted),
@@ -526,7 +531,7 @@ private fun DisksCard(d: DiskInfo) {
                 if (k.reasons.isNotEmpty()) Text(k.reasons.joinToString(" · "), color = col, fontSize = 12.sp)
             }
         }
-        if (d.ok && d.disks.isNotEmpty()) Hint("SMART-Werte aus dem N5. Bei „ersetzen“ zuerst Backup prüfen, dann die Platte tauschen.")
+        if (d.ok && d.disks.isNotEmpty()) Hint("Schächte von links nach rechts gezählt. Vor dem Ausbauen die Seriennummer (SN) auf dem Etikett vergleichen.")
     }
 }
 

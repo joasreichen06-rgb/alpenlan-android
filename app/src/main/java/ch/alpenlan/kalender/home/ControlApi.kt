@@ -35,7 +35,8 @@ data class ShellyChannel(val key: String, val name: String, val icon: String, va
 data class Ups(val ok: Boolean, val model: String, val onBattery: Boolean, val low: Boolean, val charging: Boolean,
                val charge: Double?, val runtimeS: Double?, val load: Double?)
 data class PhysDisk(val dev: String, val model: String, val type: String, val size: Double, val health: String, val wearout: Int?,
-                    val temp: Int?, val hours: Int?, val verdict: String, val reasons: List<String>)
+                    val temp: Int?, val hours: Int?, val verdict: String, val reasons: List<String>,
+                    val serial: String = "", val bay: String = "")
 data class DiskInfo(val ok: Boolean, val error: String?, val disks: List<PhysDisk>)
 data class ControlModel(
     val haConnected: Boolean, val pc: Pc, val avr: Avr, val printer: Printer,
@@ -102,7 +103,8 @@ fun parseModel(j: JSONObject): ControlModel {
                 d.optJSONArray("disks").list {
                     PhysDisk(it.optString("dev"), it.optString("model"), it.optString("type"), it.optDouble("size", 0.0), it.optString("health"),
                         it.dbl("wearout")?.toInt(), it.dbl("temp")?.toInt(), it.dbl("hours")?.toInt(), it.optString("verdict", "ok"),
-                        it.optJSONArray("reasons")?.let { r -> (0 until r.length()).map { i -> r.optString(i) } } ?: emptyList())
+                        it.optJSONArray("reasons")?.let { r -> (0 until r.length()).map { i -> r.optString(i) } } ?: emptyList(),
+                        it.optString("serial"), it.optString("bay"))
                 })
         },
         pushDevices = j.optJSONObject("push")?.optInt("devices") ?: 0,
