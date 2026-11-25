@@ -15,16 +15,16 @@ import ch.alpenlan.kalender.R
 object A {
     val ground = Color(0xFF070B12)
     val groundTop = Color(0xFF060A14)
-    val groundBottom = Color(0xFF0A1526)
+    val groundBottom = Color(0xFF0B2240)
     val panel = Color(0xFF0D1420)
     val panel2 = Color(0xFF111B2B)
     val line = Color(0xFF1F2C40)
     val line2 = Color(0xFF26344A)
     val lineSoft = Color(0xFF1A2638)
     val fg = Color(0xFFEEF2F7)
-    val fg2 = Color(0xFFCFD8E3)
-    val muted = Color(0xFF9AA6B8)
-    val dim = Color(0xFF7A879C)
+    val fg2 = Color(0xFFC3CFDF)
+    val muted = Color(0xFF9FB0C6)
+    val dim = Color(0xFF7F90A8)
     val blue = Color(0xFF4DA3FF)
     val blueLight = Color(0xFF8CC4FF)
     val blueInk = Color(0xFF06101E)
@@ -33,14 +33,22 @@ object A {
     val red = Color(0xFFFF7B63)
     val redSoft = Color(0xFFFF9A86)
     val now = Color(0xFFFF7B63)
+    // Glas-Stil
+    val btn = Color(0xFF2F86E6)
+    val glass = Color(0x0FEEF2F7)       // rgba(238,242,247,.06)
+    val glassLine = Color(0x1FEEF2F7)   // rgba(238,242,247,.12)
+    val ghost = Color(0x14EEF2F7)       // rgba(238,242,247,.08)
+    val ghostOn = Color(0x2EEEF2F7)     // rgba(238,242,247,.18)
+    // Ersatz für das fehlende Verwischen: etwas dunkler und dichter, damit Text lesbar bleibt
+    val glassBack = Color(0x990C1628)
 }
 
 val Syne = FontFamily(Font(R.font.syne_extrabold, FontWeight.ExtraBold))
-val Manrope = FontFamily(
-    Font(R.font.manrope_regular, FontWeight.Normal),
-    Font(R.font.manrope_medium, FontWeight.Medium),
-    Font(R.font.manrope_semibold, FontWeight.SemiBold),
-    Font(R.font.manrope_bold, FontWeight.Bold),
+val Inter = FontFamily(
+    Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_medium, FontWeight.Medium),
+    Font(R.font.inter_semibold, FontWeight.SemiBold),
+    Font(R.font.inter_bold, FontWeight.Bold),
 )
 val PlexMono = FontFamily(
     Font(R.font.plexmono_regular, FontWeight.Normal),
@@ -52,19 +60,19 @@ val MonoLabel = TextStyle(fontFamily = PlexMono, fontWeight = FontWeight.Medium,
 private val base = Typography()
 private val typography = Typography(
     // Zeit-/Datumsauswahl nutzt diese Stile – Syne ist dafür zu breit (Ziffern wurden abgeschnitten).
-    displayLarge = base.displayLarge.copy(fontFamily = Manrope, fontWeight = FontWeight.Medium),
-    displayMedium = base.displayMedium.copy(fontFamily = Manrope, fontWeight = FontWeight.Medium),
-    headlineLarge = base.headlineLarge.copy(fontFamily = Manrope, fontWeight = FontWeight.SemiBold),
-    headlineMedium = base.headlineMedium.copy(fontFamily = Manrope, fontWeight = FontWeight.Bold),
-    headlineSmall = base.headlineSmall.copy(fontFamily = Manrope, fontWeight = FontWeight.Bold),
-    titleLarge = base.titleLarge.copy(fontFamily = Manrope, fontWeight = FontWeight.Bold),
-    titleMedium = base.titleMedium.copy(fontFamily = Manrope, fontWeight = FontWeight.SemiBold),
-    titleSmall = base.titleSmall.copy(fontFamily = Manrope, fontWeight = FontWeight.SemiBold),
-    bodyLarge = base.bodyLarge.copy(fontFamily = Manrope),
-    bodyMedium = base.bodyMedium.copy(fontFamily = Manrope),
-    bodySmall = base.bodySmall.copy(fontFamily = Manrope),
-    labelLarge = base.labelLarge.copy(fontFamily = Manrope, fontWeight = FontWeight.SemiBold),
-    labelMedium = base.labelMedium.copy(fontFamily = Manrope),
+    displayLarge = base.displayLarge.copy(fontFamily = Inter, fontWeight = FontWeight.Medium),
+    displayMedium = base.displayMedium.copy(fontFamily = Inter, fontWeight = FontWeight.Medium),
+    headlineLarge = base.headlineLarge.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
+    headlineMedium = base.headlineMedium.copy(fontFamily = Inter, fontWeight = FontWeight.Bold),
+    headlineSmall = base.headlineSmall.copy(fontFamily = Inter, fontWeight = FontWeight.Bold),
+    titleLarge = base.titleLarge.copy(fontFamily = Inter, fontWeight = FontWeight.Bold),
+    titleMedium = base.titleMedium.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
+    titleSmall = base.titleSmall.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
+    bodyLarge = base.bodyLarge.copy(fontFamily = Inter),
+    bodyMedium = base.bodyMedium.copy(fontFamily = Inter),
+    bodySmall = base.bodySmall.copy(fontFamily = Inter),
+    labelLarge = base.labelLarge.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
+    labelMedium = base.labelMedium.copy(fontFamily = Inter),
     labelSmall = base.labelSmall.copy(fontFamily = PlexMono),
 )
 

@@ -74,6 +74,9 @@ import ch.alpenlan.kalender.ui.MonoLabel
 import ch.alpenlan.kalender.ui.Pill
 import ch.alpenlan.kalender.ui.Syne
 import ch.alpenlan.kalender.ui.chipColor
+import ch.alpenlan.kalender.ui.Glow
+import ch.alpenlan.kalender.ui.NightSky
+import ch.alpenlan.kalender.ui.glass
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import kotlin.math.roundToInt
@@ -107,8 +110,7 @@ private fun launch(ctx: Context, pkgs: List<String>, fallbackUrl: String?) {
 @Composable
 private fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(A.panel.copy(alpha = 0.92f))
-            .border(1.dp, A.line, RoundedCornerShape(18.dp)).padding(14.dp),
+        modifier.fillMaxWidth().glass(RoundedCornerShape(20.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
     )
@@ -125,14 +127,14 @@ private fun CardHead(title: String, dot: Color? = null, right: String? = null) {
 
 @Composable
 private fun Bar(fraction: Float, color: Color, height: Int = 8) {
-    Box(Modifier.fillMaxWidth().height(height.dp).clip(RoundedCornerShape(height.dp)).background(A.lineSoft)) {
+    Box(Modifier.fillMaxWidth().height(height.dp).clip(RoundedCornerShape(height.dp)).background(A.glassLine)) {
         Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(height.dp)).background(color))
     }
 }
 
 @Composable
 private fun RowScope.Stat(label: String, value: String) {
-    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(A.panel2).padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(A.ghost).padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Mono(label, size = 10, spacing = 1.0)
         Text(value, color = A.fg, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
@@ -140,25 +142,25 @@ private fun RowScope.Stat(label: String, value: String) {
 
 @Composable
 private fun RowScope.Action(text: String, primary: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = if (primary) RoundedCornerShape(14.dp) else RoundedCornerShape(50)
     Box(
         Modifier.weight(1f).height(46.dp).clip(shape)
-            .then(
+            .background(
                 when {
-                    primary -> Modifier.background(A.blue)
-                    danger -> Modifier.background(Color(0x1AE02204)).border(1.dp, Color(0xFF6B2A20), shape)
-                    else -> Modifier.border(1.dp, A.line2, shape)
+                    primary -> A.btn
+                    danger -> Color(0x1FFF6B75)
+                    else -> A.ghost
                 }
             )
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text(text, color = if (primary) A.blueInk else if (danger) A.redSoft else A.fg, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(text, color = if (primary) Color.White else if (danger) Color(0xFFFFB3AD) else A.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
 }
 
 @Composable
 private fun RoundBtn(text: String, label: String, size: Int = 48, onClick: () -> Unit) {
     Box(
-        Modifier.size(size.dp).clip(CircleShape).border(1.dp, A.line2, CircleShape).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+        Modifier.size(size.dp).clip(CircleShape).background(A.ghost).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, color = A.fg, fontSize = (size / 2).sp) }
 }
@@ -168,14 +170,19 @@ private fun RoundBtn(text: String, label: String, size: Int = 48, onClick: () ->
 @Composable
 fun HomeApp(vm: HomeViewModel) {
     val s by vm.state.collectAsStateWithLifecycle()
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(A.groundTop, A.groundBottom)))) {
+    Box(Modifier.fillMaxSize()) {
+        val glow = when (s.tab) {
+            HomeTab.OVERVIEW -> Glow.blue; HomeTab.ROOM -> Glow.blue; HomeTab.SERVER -> Glow.indigo; HomeTab.APPS -> Glow.teal
+        }
+        val outage = s.model?.ups?.onBattery == true
+        NightSky(if (outage) Glow.amber else glow, blurred = s.loggedIn && s.tab != HomeTab.OVERVIEW)
         if (!s.loggedIn) LoginScreen(s, vm) else Main(s, vm)
         s.toast?.let { t ->
             LaunchedEffect(s.toastStamp) { delay(2800); vm.dismissToast() }
             Box(
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 84.dp)
                     .fillMaxWidth().heightIn(min = 48.dp).shadow(10.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))
-                    .background(A.lineSoft).border(1.dp, Color(0xFF2B3B55), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                    .glass(RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
             ) { Text(t, color = A.fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
         }
     }
@@ -189,7 +196,6 @@ private fun LoginScreen(s: HomeState, vm: HomeViewModel) {
         Spacer(Modifier.height(14.dp))
         Text(buildAnnotatedString { append("ALPEN"); withStyle(SpanStyle(color = A.blue)) { append("LAN.") } }, fontFamily = Syne, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp, color = A.fg)
         Spacer(Modifier.height(8.dp))
-        Hint("PC, Anlage, Drucker, Server und Dienste an einem Ort. Die Anmeldung läuft über dein Alpenlan-Konto (Authentik), genau wie bei der Cloud.")
         Spacer(Modifier.height(20.dp))
         LinkButton(if (s.busy) "Anmelden …" else "Mit Alpenlan anmelden", Modifier.fillMaxWidth(), primary = true) {
             if (!s.busy) ctx.startActivity(vm.login())
@@ -220,9 +226,11 @@ private fun Main(s: HomeState, vm: HomeViewModel) {
                 AlpenlanLogo()
                 Spacer(Modifier.width(10.dp))
                 Mono(eyebrow, color = A.blue, modifier = Modifier.weight(1f))
+                Clock()
+                Spacer(Modifier.width(10.dp))
                 Box(Modifier.size(7.dp).clip(CircleShape).background(if (live) GREEN else A.warn))
                 Spacer(Modifier.width(6.dp))
-                Mono(if (live) "Live" else if (m == null) "Verbinde …" else "Offline", color = if (live) GREEN else A.warn, size = 10, spacing = 1.0)
+                Text(if (live) "Live" else if (m == null) "Verbinde …" else "Offline", color = if (live) A.fg2 else A.warn, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
             Text(
                 buildAnnotatedString { append(main.uppercase()); withStyle(SpanStyle(color = A.blue)) { append(accent.uppercase()) } },
@@ -249,23 +257,28 @@ private fun Main(s: HomeState, vm: HomeViewModel) {
                 HomeTab.APPS -> Apps(s, vm)
             }
         }
-        Column(Modifier.fillMaxWidth().background(A.ground.copy(alpha = 0.97f))) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(A.line))
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().height(64.dp)) {
-                HomeTab.entries.forEach { t ->
-                    val on = t == s.tab
-                    Column(
-                        Modifier.weight(1f).fillMaxHeight().clickable(role = Role.Tab) { vm.setTab(t) },
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
-                    ) {
-                        Box(Modifier.size(22.dp, 4.dp).clip(RoundedCornerShape(2.dp)).background(if (on) A.blue else Color.Transparent))
-                        Spacer(Modifier.height(6.dp))
-                        Mono(t.label, color = if (on) A.blue else A.muted, size = 10, spacing = 1.0)
-                    }
-                }
+        Row(
+            Modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth().height(58.dp)
+                .glass(RoundedCornerShape(50)).padding(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            HomeTab.entries.forEach { t ->
+                val on = t == s.tab
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(50)).background(if (on) A.ghostOn else Color.Transparent)
+                        .clickable(role = Role.Tab) { vm.setTab(t) },
+                    contentAlignment = Alignment.Center,
+                ) { Text(t.label, color = if (on) A.fg else A.fg2, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1) }
             }
         }
     }
+}
+
+@Composable
+private fun Clock() {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(10_000); now = System.currentTimeMillis() } }
+    Text(java.text.SimpleDateFormat("HH:mm", java.util.Locale.GERMANY).format(java.util.Date(now)), color = A.fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
 }
 
 // ------------------------------------------------------------------ Übersicht
@@ -324,7 +337,7 @@ private fun Overview(s: HomeState, vm: HomeViewModel) {
         Mono("Heute & morgen", color = A.blue)
         if (s.agenda.isEmpty()) Text("Keine Termine", color = A.muted, fontSize = 14.sp)
         s.agenda.forEach { e -> AgendaRow(e, s) }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(A.lineSoft))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(A.glassLine))
         Text(
             when {
                 s.openTasks == 0 -> "Keine Aufgaben fällig"
@@ -339,7 +352,7 @@ private fun Overview(s: HomeState, vm: HomeViewModel) {
 @Composable
 private fun RowScope.Health(label: String, value: String, ok: Boolean) {
     Column(
-        Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(A.panel.copy(alpha = 0.9f)).border(1.dp, A.line, RoundedCornerShape(14.dp)).padding(10.dp),
+        Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).glass(RoundedCornerShape(14.dp)).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -355,12 +368,12 @@ private fun RowScope.Health(label: String, value: String, ok: Boolean) {
 private fun Tile(title: String, sub: String, on: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     Column(
-        modifier.clip(shape).background(if (on) ON_TILE else A.panel2).border(1.dp, if (on) A.blue else A.line, shape)
+        modifier.glass(shape, tint = if (on) A.blue else null, rim = on)
             .clickable(role = Role.Switch, onClick = onClick).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(title, color = A.fg, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Text(sub, color = if (on) A.blueLight else A.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(sub, color = if (on) A.blueLight else A.fg2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -382,7 +395,7 @@ private fun VolumeRow(m: ControlModel, vm: HomeViewModel) {
 @Composable
 private fun PrinterRow(p: Printer, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(A.panel2).border(1.dp, A.line, RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(A.ghost).clickable(onClick = onClick).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -458,7 +471,7 @@ private fun Server(s: HomeState, vm: HomeViewModel) {
                         color = if (b.lastOk == false) A.warn else A.fg2, fontSize = 14.sp,
                     )
                     if (b.schedules.isNotEmpty()) Hint("Zeitplan: " + b.schedules.joinToString(", "))
-                    else Hint("Kein Backup-Job geplant – richte in Proxmox unter Rechenzentrum → Backup einen Job ein.")
+                    else Hint("Kein Backup-Job geplant")
                 }
             }
         }
@@ -472,7 +485,7 @@ private fun Server(s: HomeState, vm: HomeViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     pair.forEach { sv ->
                         Column(
-                            Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(A.panel2).padding(10.dp),
+                            Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(A.ghost).padding(10.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -499,11 +512,11 @@ private fun DisksCard(d: DiskInfo) {
             "Festplatten", if (!d.ok) A.warn else when (worst) { "replace" -> A.redSoft; "watch" -> A.warn; else -> GREEN },
             if (!d.ok) "keine Daten" else when (worst) { "replace" -> "ersetzen"; "watch" -> "beobachten"; else -> "gesund" },
         )
-        if (!d.ok) Text(d.error ?: "Noch keine Daten – Control liest die Platten alle 30 Minuten.", color = A.warn, fontSize = 13.sp)
+        if (!d.ok) Text(d.error ?: "Noch keine Daten", color = A.warn, fontSize = 13.sp)
         d.disks.forEach { k ->
             val col = when (k.verdict) { "replace" -> A.redSoft; "watch" -> A.warn; else -> GREEN }
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(A.panel2).padding(10.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(A.ghost).padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (k.bay.isNotBlank()) Text(
@@ -531,7 +544,6 @@ private fun DisksCard(d: DiskInfo) {
                 if (k.reasons.isNotEmpty()) Text(k.reasons.joinToString(" · "), color = col, fontSize = 12.sp)
             }
         }
-        if (d.ok && d.disks.isNotEmpty()) Hint("Schächte von links nach rechts gezählt. Vor dem Ausbauen die Seriennummer (SN) auf dem Etikett vergleichen.")
     }
 }
 
@@ -544,9 +556,9 @@ private fun PushCard(m: ControlModel, vm: HomeViewModel) {
         CardHead("Benachrichtigungen", if (reg) GREEN else A.warn, if (reg) "aktiv" else "nicht eingerichtet")
         Text(
             when {
-                reg -> "Stromausfall, Strom zurück und Festplatten-Probleme kommen als Push aufs Handy. Angemeldete Geräte: ${m.pushDevices}."
-                st == false -> "Für Push ohne Google braucht es eine Verteiler-App: „ntfy“ aus F-Droid oder dem Play Store installieren, danach diese App neu öffnen."
-                else -> "Wird eingerichtet … falls das so bleibt: ntfy installieren und die App neu öffnen."
+                reg -> "${m.pushDevices} Geräte angemeldet"
+                st == false -> "ntfy fehlt"
+                else -> "Wird eingerichtet …"
             },
             color = A.muted, fontSize = 13.sp,
         )
@@ -571,8 +583,8 @@ private fun UpsCard(u: Ups) {
             Meter("Batterie", "${ch.roundToInt()} %", (ch / 100).toFloat(), if (u.onBattery || ch < 50) A.warn else GREEN)
             Meter("Last", "${(u.load ?: 0.0).roundToInt()} %", ((u.load ?: 0.0) / 100).toFloat(), A.blue)
             Text(
-                if (u.onBattery) "Reicht noch ca. $mins. Der Server fährt rechtzeitig selbst herunter und startet wieder, sobald Strom da ist."
-                else "Reserve bei Stromausfall: ca. $mins" + (u.model.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                if (u.onBattery) "noch ca. $mins"
+                else "Reserve ca. $mins" + (u.model.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
                 color = if (u.onBattery) A.warn else A.muted, fontSize = 13.sp,
             )
         }
@@ -609,7 +621,7 @@ private fun Apps(s: HomeState, vm: HomeViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             row.forEach { a ->
                 Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(A.panel.copy(alpha = 0.9f)).border(1.dp, A.line, RoundedCornerShape(16.dp))
+                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).glass(RoundedCornerShape(16.dp))
                         .clickable(role = Role.Button) { a.open(ctx) }.padding(vertical = 14.dp, horizontal = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -631,7 +643,6 @@ private fun Apps(s: HomeState, vm: HomeViewModel) {
             Mono(if (s.offline == null) "verbunden" else "offline", color = if (s.offline == null) GREEN else A.warn, size = 10, spacing = 0.6)
         }
         LinkButton("Abmelden", Modifier.fillMaxWidth()) { vm.logout() }
-        Hint("Push-Benachrichtigungen (ntfy) und Widgets folgen in einer nächsten Version.")
     }
 }
 

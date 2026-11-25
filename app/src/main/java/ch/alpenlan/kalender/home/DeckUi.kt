@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import ch.alpenlan.kalender.ui.A
 import ch.alpenlan.kalender.ui.Mono
 import ch.alpenlan.kalender.ui.MonoLabel
+import ch.alpenlan.kalender.ui.glass
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -115,14 +117,15 @@ private val STEP_DP = mapOf("vol_step" to 6f, "prn_speed" to 9f, "prn_flow" to 9
 // ------------------------------------------------------------------ Farben und Symbole
 
 private object DC {
-    val navy = Color(0xFF0F1A2E) to Color(0xFFE8EEF8)
-    val blue = Color(0xFF4EA1FF) to Color(0xFF04101F)
-    val green = Color(0xFF1F9E6A) to Color(0xFFEAFFF5)
-    val amber = Color(0xFFE8A23A) to Color(0xFF1D1203)
-    val red = Color(0xFFC9434A) to Color(0xFFFFF1F1)
-    val slate = Color(0xFF2A3346) to Color(0xFFD6DEEA)
-    val black = Color(0xFF05070B) to Color(0xFF7D8BA3)
-    val empty = Color(0xFF0A0D13) to Color(0xFF4D5A72)
+    // Glas-Stil: erste Farbe tönt das Glas (Transparent = neutrales Glas), zweite ist die Schrift
+    val navy = Color.Transparent to Color(0xFFEEF2F7)
+    val blue = Color(0xFF4DA3FF) to Color(0xFFEEF2F7)
+    val green = Color(0xFF3DDC97) to Color(0xFFEEF2F7)
+    val amber = Color(0xFFFFB547) to Color(0xFFEEF2F7)
+    val red = Color(0xFFFF6B75) to Color(0xFFEEF2F7)
+    val slate = Color.Transparent to Color(0xFFEEF2F7)
+    val black = Color.Transparent to Color(0xFF9FB0C6)
+    val empty = Color.Transparent to Color(0xFF4D5A72)
     val mutedBg = Color(0xFF1C0B10)
     val mutedText = Color(0xFFFF6B75)
     val mutedLabel = Color(0xFFFF9AA2)
@@ -343,19 +346,17 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
             val on = i == page
             Box(
                 Modifier.height(34.dp).clip(RoundedCornerShape(17.dp))
-                    .then(if (on) Modifier.background(A.blue) else Modifier.border(1.dp, A.line2, RoundedCornerShape(17.dp)))
+                    .background(if (on) A.ghostOn else A.ghost)
                     .clickable(role = Role.Tab, onClickLabel = "Seite ${q.name}") { goPage(i) }
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text(q.name, color = if (on) A.blueInk else A.fg2, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+            ) { Text(q.name, color = if (on) A.fg else A.fg2, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium) }
         }
     }
 
     // Deck
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFF121926), Color(0xFF0B1019))))
-            .border(1.dp, Color(0xFF1C2738), RoundedCornerShape(22.dp)).padding(12.dp),
+        Modifier.fillMaxWidth().glass(RoundedCornerShape(24.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val cols = if (p.keys.size <= 4) 2 else 3
@@ -406,8 +407,7 @@ internal fun DeckControl(s: HomeState, vm: HomeViewModel) {
     // Unter dem Deck: Kamera auf der Drucker-Seite, sonst die Kurzübersicht
     if (p.id == "strom") {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(A.panel.copy(alpha = 0.9f))
-                .border(1.dp, A.line, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().glass(RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Mono("Leistung jetzt", size = 9, spacing = 1.0)
@@ -448,8 +448,9 @@ private fun DeckTile(
     val icon = deckIcon(k.icon)
     val (bg, fg) = look.colors
     Box(
-        modifier.aspectRatio(if (big) 1.3f else 1f).scale(scale).clip(RoundedCornerShape(18.dp)).background(bg)
-            .border(1.dp, Color(0xFF232A38), RoundedCornerShape(18.dp))
+        modifier.aspectRatio(if (big) 1.3f else 1f).scale(scale)
+            .then(if (look.label.isEmpty()) Modifier.clip(RoundedCornerShape(18.dp)).background(Color(0x08EEF2F7))
+                  else Modifier.glass(RoundedCornerShape(18.dp), tint = bg.takeIf { it != Color.Transparent }, rim = bg == DC.green.first || bg == DC.blue.first))
             .semantics { contentDescription = (k.label.ifEmpty { "leere Taste" }) + (if (look.status.isNotEmpty()) ", ${look.status}" else "") + (if (hasHold) ", gedrückt halten für zweite Funktion" else "") }
             .pointerInput(page, k) {
                 val slop = with(density) { 10.dp.toPx() }
@@ -479,9 +480,10 @@ private fun DeckTile(
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(if (big) 5.dp else 3.dp)) {
-            if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(if (big) 34.dp else 28.dp))
+            val accent = if (bg == Color.Transparent) fg else lerp(bg, Color.White, 0.45f)
+            if (icon != null) Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(if (big) 34.dp else 28.dp))
             if (look.label.isNotEmpty()) Text(look.label, color = fg, fontSize = fs(if (big) 17f else 14f), lineHeight = fs(if (big) 19f else 16f), fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (look.status.isNotEmpty()) Text(look.status, style = MonoLabel.copy(fontSize = fs(if (big) 11f else 9.5f), lineHeight = fs(if (big) 13f else 11f), letterSpacing = 0.sp, color = fg.copy(alpha = 0.8f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (look.status.isNotEmpty()) Text(look.status, style = MonoLabel.copy(fontSize = fs(if (big) 11f else 9.5f), lineHeight = fs(if (big) 13f else 11f), letterSpacing = 0.sp, color = if (bg == Color.Transparent) A.fg2 else lerp(bg, Color.White, 0.55f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (hasHold) {
             Box(
@@ -505,9 +507,7 @@ private fun DeckSlider(
     val shape = RoundedCornerShape(14.dp)
     val bar = f.bar.coerceIn(0f, 1f)
     Box(
-        modifier.height(92.dp).clip(shape)
-            .background(if (f.muted) DC.mutedBg else Color(0xFF0B1220))
-            .border(1.dp, if (active) A.blue else if (f.muted) Color(0xFF5A1F29) else Color(0xFF1C2738), shape)
+        modifier.height(92.dp).glass(shape, tint = if (f.muted) DC.mutedText else null, rim = active)
             .semantics { contentDescription = if (enabled) "${f.label}: ${f.value}. Seitlich ziehen zum Einstellen, tippen zum Drücken, halten für die Zusatzfunktion" else "leeres Feld" }
             .then(if (!enabled) Modifier else Modifier.pointerInput(page, f.label, stepDp) {
                 val slop = with(density) { 8.dp.toPx() }
@@ -554,7 +554,7 @@ private fun DeckSlider(
         }
         Column(Modifier.fillMaxSize().padding(9.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(f.label.ifEmpty { "—" }.uppercase(), style = MonoLabel.copy(fontSize = fs(if (compact) 8f else 9f), letterSpacing = 0.6.sp, color = if (f.muted) DC.mutedLabel else Color(0xFF7D8BA3)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(f.label.ifEmpty { "—" }.uppercase(), style = MonoLabel.copy(fontSize = fs(if (compact) 8f else 9f), letterSpacing = 0.6.sp, color = if (f.muted) DC.mutedLabel else A.muted), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (modeTag.isNotEmpty()) { Spacer(Modifier.width(4.dp)); Text(modeTag, style = MonoLabel.copy(fontSize = fs(8f), letterSpacing = 0.sp, color = A.blueLight)) }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -578,9 +578,7 @@ private fun DeckSlider(
 private fun DeckOverlay(f: Face) {
     val icon = deckIcon(f.icon.ifEmpty { "gauge" })
     Row(
-        Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp))
-            .background(if (f.muted) Brush.horizontalGradient(listOf(Color(0xFF3A1118), DC.mutedBg)) else SolidColor(Color(0xFF0D1626)))
-            .border(1.dp, Color(0xFF2B3B55), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp),
+        Modifier.fillMaxSize().glass(RoundedCornerShape(14.dp), tint = if (f.muted) DC.mutedText else null).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = if (f.muted) Color(0xFFFF5D68) else A.blue, modifier = Modifier.size(24.dp))
@@ -589,7 +587,7 @@ private fun DeckOverlay(f: Face) {
             Text(if (f.muted) f.value.uppercase() else f.value, color = if (f.muted) DC.mutedText else A.fg, fontSize = fs(24f), fontWeight = FontWeight.ExtraBold, maxLines = 1)
         }
         if (f.sub.isNotEmpty()) Text(f.sub, style = MonoLabel.copy(fontSize = fs(10f), letterSpacing = 0.sp, color = DC.mutedLabel), maxLines = 1)
-        Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF1A2438))) {
+        Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(A.glassLine)) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(f.bar.coerceIn(0f, 1f)).background(if (f.muted) Color(0xFF6B2A33) else A.blue))
         }
     }
@@ -616,8 +614,7 @@ private fun Summary(m: ControlModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 pair.forEach { (label, value, dot) ->
                     Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(A.panel.copy(alpha = 0.9f))
-                            .border(1.dp, A.line, RoundedCornerShape(12.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+                        Modifier.weight(1f).glass(RoundedCornerShape(12.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

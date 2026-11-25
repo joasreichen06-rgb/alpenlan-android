@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.sp
 import ch.alpenlan.kalender.ui.A
 import ch.alpenlan.kalender.ui.AlpenlanLogo
 import ch.alpenlan.kalender.ui.AlpenlanTheme
-import ch.alpenlan.kalender.ui.Manrope
+import ch.alpenlan.kalender.ui.Inter
 import ch.alpenlan.kalender.ui.Mono
 import ch.alpenlan.kalender.ui.Pill
 import ch.alpenlan.kalender.ui.SwitchRow
@@ -204,7 +204,7 @@ private fun LightSetup(
             modifier = Modifier.fillMaxWidth().height(54.dp),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = A.blue, contentColor = A.blueInk),
-        ) { Text("Live verbinden", fontFamily = Manrope, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+        ) { Text("Live verbinden", fontFamily = Inter, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
         SecondaryButton("Testmodus (ohne Server)") { onStart(true, url, zone, useTorch) }
         SecondaryButton("Taschenlampe kurz testen", onTorchTest)
 
@@ -220,10 +220,10 @@ private fun SecondaryButton(text: String, onClick: () -> Unit) {
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, A.line2),
         colors = ButtonDefaults.outlinedButtonColors(containerColor = A.panel, contentColor = A.fg),
-    ) { Text(text, fontFamily = Manrope, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
+    ) { Text(text, fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
 }
 
 @Composable
 private fun Hint(text: String) {
-    Text(text, color = A.muted, fontSize = 13.sp, lineHeight = 18.sp, fontFamily = Manrope)
+    Text(text, color = A.muted, fontSize = 13.sp, lineHeight = 18.sp, fontFamily = Inter)
 }
