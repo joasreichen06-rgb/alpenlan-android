@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
@@ -68,11 +70,11 @@ import kotlinx.coroutines.delay
 @Composable
 fun App(vm: AppViewModel) {
     val s by vm.state.collectAsStateWithLifecycle()
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(A.groundTop, A.groundBottom)))
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        NightSky(
+            if (s.tab == Tab.TASKS) Glow.indigo else Glow.blue,
+            blurred = s.screen != Screen.MAIN,
+        )
         if (!s.settingsLoaded) return@Box
         when (s.screen) {
             Screen.SETUP -> SetupScreen(s, vm)
@@ -202,21 +204,22 @@ private fun title(s: UiState): Pair<String, String> {
 private fun ModeSwitch(mode: CalView, onPick: (CalView) -> Unit) {
     Row(
         Modifier
-            .border(1.dp, A.line2, RoundedCornerShape(10.dp))
-            .padding(2.dp)
+            .clip(RoundedCornerShape(50))
+            .background(A.ghost)
+            .padding(3.dp)
     ) {
         listOf(CalView.MONTH to "Monat", CalView.WEEK to "Woche", CalView.DAY to "Tag").forEach { (m, label) ->
             val on = m == mode
             Box(
                 Modifier
                     .height(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (on) A.blue else androidx.compose.ui.graphics.Color.Transparent)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (on) A.ghostOn else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable(role = Role.Tab) { onPick(m) }
                     .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(label, color = if (on) A.blueInk else A.muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(label, color = if (on) A.fg else A.fg2, fontSize = 12.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
             }
         }
     }
@@ -243,7 +246,7 @@ private fun Fab(s: UiState, vm: AppViewModel, modifier: Modifier) {
             .size(56.dp)
             .shadow(10.dp, RoundedCornerShape(18.dp))
             .clip(RoundedCornerShape(18.dp))
-            .background(A.blue)
+            .background(A.btn)
             .clickable(role = Role.Button, onClickLabel = if (s.tab == Tab.CALENDAR) "Neuer Termin" else "Neue Aufgabe") {
                 if (s.tab == Tab.CALENDAR) vm.openSheet(vm.newEventDraft() ?: Sheet.Visibility)
                 else {
@@ -253,7 +256,7 @@ private fun Fab(s: UiState, vm: AppViewModel, modifier: Modifier) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Default.Add, contentDescription = if (s.tab == Tab.CALENDAR) "Neuer Termin" else "Neue Aufgabe", tint = A.blueInk, modifier = Modifier.size(28.dp))
+        Icon(Icons.Default.Add, contentDescription = if (s.tab == Tab.CALENDAR) "Neuer Termin" else "Neue Aufgabe", tint = Color.White, modifier = Modifier.size(28.dp))
     }
 }
 
@@ -292,25 +295,27 @@ private fun ToastHost(s: UiState, vm: AppViewModel, modifier: Modifier) {
 @Composable
 private fun BottomNav(s: UiState, vm: AppViewModel) {
     val open = s.liveTasks.count { !it.done && it.parentId == null }
-    Column(Modifier.fillMaxWidth().background(A.ground.copy(alpha = 0.97f))) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(A.line))
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(64.dp)) {
-            NavItem("Kalender", s.tab == Tab.CALENDAR, Modifier.weight(1f), { Icon(Icons.Default.DateRange, null, Modifier.size(22.dp)) }) { vm.setTab(Tab.CALENDAR) }
-            NavItem(if (open > 0) "Aufgaben · $open" else "Aufgaben", s.tab == Tab.TASKS, Modifier.weight(1f), { Icon(Icons.AutoMirrored.Filled.List, null, Modifier.size(22.dp)) }) { vm.setTab(Tab.TASKS) }
-        }
+    Row(
+        Modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth().height(58.dp)
+            .glass(RoundedCornerShape(50)).padding(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        NavItem("Kalender", s.tab == Tab.CALENDAR, Modifier.weight(1f), { Icon(Icons.Default.DateRange, null, Modifier.size(20.dp)) }) { vm.setTab(Tab.CALENDAR) }
+        NavItem(if (open > 0) "Aufgaben · $open" else "Aufgaben", s.tab == Tab.TASKS, Modifier.weight(1f), { Icon(Icons.AutoMirrored.Filled.List, null, Modifier.size(20.dp)) }) { vm.setTab(Tab.TASKS) }
     }
 }
 
 @Composable
 private fun NavItem(label: String, on: Boolean, modifier: Modifier, icon: @Composable () -> Unit, onClick: () -> Unit) {
-    val color = if (on) A.blue else A.muted
-    Column(
-        modifier.fillMaxSize().clickable(role = Role.Tab, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+    val color = if (on) A.fg else A.fg2
+    Row(
+        modifier.fillMaxHeight().clip(RoundedCornerShape(50)).background(if (on) A.ghostOn else Color.Transparent)
+            .clickable(role = Role.Tab, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides color) { icon() }
-        Spacer(Modifier.height(4.dp))
-        Mono(label, color = color, size = 10, spacing = 1.0)
+        Spacer(Modifier.width(8.dp))
+        Text(label, color = color, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
     }
 }

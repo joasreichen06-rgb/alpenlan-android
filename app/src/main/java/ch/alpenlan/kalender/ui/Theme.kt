@@ -16,11 +16,12 @@ object A {
     val ground = Color(0xFF070B12)
     val groundTop = Color(0xFF060A14)
     val groundBottom = Color(0xFF0B2240)
-    val panel = Color(0xFF0D1420)
-    val panel2 = Color(0xFF111B2B)
-    val line = Color(0xFF1F2C40)
-    val line2 = Color(0xFF26344A)
-    val lineSoft = Color(0xFF1A2638)
+    // Glas-Stil: Flächen halbdurchsichtig und leicht bläulich, Kanten fein und hell
+    val panel = Color(0xD90C1628)       // Karten, Blätter, Dialoge (dichter, da Compose nicht live verwischt)
+    val panel2 = Color(0xFF14223A)      // Eingabefelder, Menüs (deckend)
+    val line = Color(0x24EEF2F7)
+    val line2 = Color(0x33EEF2F7)
+    val lineSoft = Color(0x1AEEF2F7)
     val fg = Color(0xFFEEF2F7)
     val fg2 = Color(0xFFC3CFDF)
     val muted = Color(0xFF9FB0C6)
@@ -77,22 +78,22 @@ private val typography = Typography(
 )
 
 private val scheme = darkColorScheme(
-    primary = A.blue,
-    onPrimary = A.blueInk,
+    primary = A.btn,
+    onPrimary = Color.White,
     primaryContainer = Color(0xFF16304F),
     onPrimaryContainer = A.fg,
     secondary = A.blueLight,
     onSecondary = A.blueInk,
     background = A.ground,
     onBackground = A.fg,
-    surface = A.panel,
+    surface = Color(0xFF0D1830),
     onSurface = A.fg,
     surfaceVariant = A.panel2,
     onSurfaceVariant = A.muted,
-    surfaceContainer = A.panel,
+    surfaceContainer = Color(0xFF0D1830),
     surfaceContainerHigh = A.panel2,
     surfaceContainerHighest = Color(0xFF16233A),
-    surfaceContainerLow = A.panel,
+    surfaceContainerLow = Color(0xFF0D1830),
     surfaceContainerLowest = A.ground,
     outline = A.line2,
     outlineVariant = A.line,

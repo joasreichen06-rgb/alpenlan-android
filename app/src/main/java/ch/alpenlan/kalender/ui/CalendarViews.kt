@@ -245,8 +245,8 @@ private fun DayCellBg(s: UiState, vm: AppViewModel, d: LocalDate, inMonth: Boole
     Box(
         modifier
             .clip(shape)
-            .background(if (isSel) A.blue.copy(alpha = 0.12f) else if (inMonth) A.panel else A.panel.copy(alpha = 0.45f))
-            .border(1.5.dp, if (isSel) A.blue else if (inMonth) Color(0xFF172235) else Color.Transparent, shape)
+            .background(if (isSel) A.blue.copy(alpha = 0.2f) else if (inMonth) A.glassBack.copy(alpha = 0.5f) else Color.Transparent)
+            .border(if (isSel) 2.dp else 1.dp, if (isSel) Color(0xE6EEF2F7) else if (inMonth) A.glassLine else Color.Transparent, shape)
             .clickable(onClickLabel = "Tagesübersicht öffnen") { vm.select(d, openDaySheet = true) }
             .semantics { contentDescription = "${d.dayOfMonth}. ${Dates.MONTHS[d.monthValue - 1]}, $count Einträge" }
             .padding(3.dp),

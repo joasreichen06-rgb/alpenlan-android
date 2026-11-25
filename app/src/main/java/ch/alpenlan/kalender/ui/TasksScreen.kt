@@ -110,7 +110,7 @@ fun TasksScreen(s: UiState, vm: AppViewModel) {
                     Modifier
                         .height(36.dp)
                         .clip(RoundedCornerShape(18.dp))
-                        .then(if (on) Modifier.background(A.blue.copy(alpha = 0.16f)).border(1.dp, A.blue, RoundedCornerShape(18.dp)) else Modifier.border(1.dp, A.line2, RoundedCornerShape(18.dp)))
+                        .background(if (on) A.ghostOn else A.ghost)
                         .clickable(role = Role.Tab) { vm.setTaskFilter(f) }
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -202,10 +202,10 @@ fun EmptyHint(title: String, text: String, onAction: () -> Unit) {
             Modifier
                 .height(44.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(A.blue)
+                .background(A.btn)
                 .clickable(role = Role.Button, onClick = onAction)
                 .padding(horizontal = 18.dp),
             contentAlignment = Alignment.Center,
-        ) { Text("Einrichtung öffnen", color = A.blueInk, fontWeight = FontWeight.Bold) }
+        ) { Text("Einrichtung öffnen", color = Color.White, fontWeight = FontWeight.Bold) }
     }
 }

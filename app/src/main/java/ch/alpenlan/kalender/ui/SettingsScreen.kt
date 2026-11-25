@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -222,11 +223,11 @@ fun LinkButton(text: String, modifier: Modifier = Modifier, primary: Boolean = f
         modifier
             .height(44.dp)
             .clip(RoundedCornerShape(12.dp))
-            .then(if (primary) Modifier.background(A.blue) else Modifier.background(A.blue.copy(alpha = 0.10f)).border(1.dp, A.blue, RoundedCornerShape(12.dp)))
+            .then(if (primary) Modifier.background(A.btn) else Modifier.clip(RoundedCornerShape(50)).background(A.ghost))
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = if (primary) A.blueInk else A.fg, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(text, color = if (primary) Color.White else A.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }

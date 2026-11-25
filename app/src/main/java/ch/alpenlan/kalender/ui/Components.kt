@@ -135,8 +135,8 @@ fun Pill(text: String, selected: Boolean, onClick: () -> Unit, dot: Color? = nul
             .height(36.dp)
             .clip(shape)
             .then(
-                if (selected) Modifier.background(fill ?: A.blue.copy(alpha = 0.16f)).border(1.dp, dot ?: A.blue, shape)
-                else Modifier.border(1.dp, A.line2, shape)
+                if (selected) Modifier.background(fill ?: A.ghostOn).then(if (dot != null) Modifier.border(1.dp, dot, shape) else Modifier)
+                else Modifier.background(A.ghost)
             )
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 12.dp),

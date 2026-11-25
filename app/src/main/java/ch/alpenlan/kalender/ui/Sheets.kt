@@ -120,13 +120,14 @@ private fun SheetHeader(title: String, sub: String? = null, onClose: () -> Unit,
 }
 
 @Composable
-private fun OutlineButton(text: String, modifier: Modifier = Modifier, color: Color = A.blue, textColor: Color = A.fg, fill: Color = A.blue.copy(alpha = 0.12f), onClick: () -> Unit) {
+private fun OutlineButton(text: String, modifier: Modifier = Modifier, color: Color = A.blue, textColor: Color = A.fg, fill: Color = A.ghostOn, onClick: () -> Unit) {
+    // Glas-Stil: runder Ghost-Knopf; color bleibt für die Aufrufer erhalten, Rand nur bei farbigen Knöpfen
     Box(
         modifier
             .height(46.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(fill)
-            .border(1.dp, color, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(50))
+            .background(if (fill == Color.Transparent) A.ghost else fill)
+            .then(if (color != A.blue && color != A.line2) Modifier.border(1.dp, color, RoundedCornerShape(50)) else Modifier)
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
@@ -326,10 +327,10 @@ private fun TaskDetail(s: UiState, vm: AppViewModel, t: TaskItem) {
             )
             Spacer(Modifier.width(8.dp))
             Box(
-                Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(A.blue)
+                Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(A.btn)
                     .clickable(role = Role.Button, onClickLabel = "Unteraufgabe hinzufügen") { vm.addSubtask(t, newSub); newSub = "" },
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Default.Add, contentDescription = "Unteraufgabe hinzufügen", tint = A.blueInk) }
+            ) { Icon(Icons.Default.Add, contentDescription = "Unteraufgabe hinzufügen", tint = Color.White) }
         }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -354,9 +355,9 @@ private fun EditorHeader(title: String, onCancel: () -> Unit, onSave: () -> Unit
         TextButton(onClick = onCancel) { Text("Abbrechen", color = A.muted, fontWeight = FontWeight.SemiBold) }
         Text(title, color = A.fg, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Box(
-            Modifier.height(40.dp).clip(RoundedCornerShape(10.dp)).background(A.blue).clickable(role = Role.Button, onClick = onSave).padding(horizontal = 16.dp),
+            Modifier.height(40.dp).clip(RoundedCornerShape(14.dp)).background(A.btn).clickable(role = Role.Button, onClick = onSave).padding(horizontal = 16.dp),
             contentAlignment = Alignment.Center,
-        ) { Text("Speichern", color = A.blueInk, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+        ) { Text("Speichern", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
     }
 }
 

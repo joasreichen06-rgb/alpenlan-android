@@ -128,6 +128,8 @@ import ch.alpenlan.kalender.ui.MonoLabel
 import ch.alpenlan.kalender.ui.Pill
 import ch.alpenlan.kalender.ui.SwitchRow
 import ch.alpenlan.kalender.ui.Syne
+import ch.alpenlan.kalender.ui.Glow
+import ch.alpenlan.kalender.ui.NightSky
 import ch.alpenlan.kalender.ui.fieldColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -207,7 +209,8 @@ private fun SyncIcon(syncing: Boolean, onClick: () -> Unit) {
 @Composable
 fun ContactsApp(vm: ContactsViewModel) {
     val s by vm.state.collectAsStateWithLifecycle()
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(A.groundTop, A.groundBottom)))) {
+    Box(Modifier.fillMaxSize()) {
+        NightSky(Glow.teal)
         if (!s.loaded) return@Box
         if (!s.permission) {
             PermissionScreen(vm)
@@ -349,7 +352,7 @@ private fun ListScreen(s: ContactsState, vm: ContactsViewModel) {
                 entries.forEach { e ->
                     when (e) {
                         is Entry.Header -> stickyHeader(key = "h_${e.letter}") {
-                            Box(Modifier.fillMaxWidth().background(A.groundTop.copy(alpha = 0.96f)).padding(top = 10.dp, bottom = 4.dp)) {
+                            Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xF2060A14), Color(0xCC060A14)))).padding(top = 10.dp, bottom = 4.dp)) {
                                 Mono(e.letter, color = A.blue, size = 12)
                             }
                         }
@@ -588,7 +591,7 @@ private fun QuickAction(icon: androidx.compose.ui.graphics.vector.ImageVector, l
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            Modifier.size(48.dp).clip(CircleShape).background(if (enabled) A.blue.copy(alpha = 0.16f) else A.panel2).border(1.dp, if (enabled) A.blue else A.line, CircleShape),
+            Modifier.size(48.dp).clip(CircleShape).background(if (enabled) A.ghostOn else A.ghost),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, contentDescription = null, tint = if (enabled) A.blueLight else A.dim, modifier = Modifier.size(22.dp)) }
         Spacer(Modifier.height(4.dp))
