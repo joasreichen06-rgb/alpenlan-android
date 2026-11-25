@@ -210,7 +210,7 @@ private fun SyncIcon(syncing: Boolean, onClick: () -> Unit) {
 fun ContactsApp(vm: ContactsViewModel) {
     val s by vm.state.collectAsStateWithLifecycle()
     Box(Modifier.fillMaxSize()) {
-        NightSky(Glow.teal)
+        NightSky(Glow.teal, blurred = true)
         if (!s.loaded) return@Box
         if (!s.permission) {
             PermissionScreen(vm)

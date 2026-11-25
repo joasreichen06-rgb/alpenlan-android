@@ -47,7 +47,7 @@ val canBlur = Build.VERSION.SDK_INT >= 31
  * [blurred] = Unterseite: Himmel stark verwischt und abgedunkelt.
  */
 @Composable
-fun NightSky(glow: Pair<Color, Color> = Glow.blue, blurred: Boolean = false, modifier: Modifier = Modifier) {
+fun NightSky(glow: Pair<Color, Color> = Glow.blue, blurred: Boolean = true, modifier: Modifier = Modifier) {
     val g1 by animateColorAsState(glow.first, tween(800), label = "glow1")
     val g2 by animateColorAsState(glow.second, tween(800), label = "glow2")
     val dim by animateFloatAsState(if (blurred) 1f else 0f, tween(450), label = "dim")

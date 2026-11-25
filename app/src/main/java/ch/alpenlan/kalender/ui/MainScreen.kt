@@ -73,7 +73,7 @@ fun App(vm: AppViewModel) {
     Box(Modifier.fillMaxSize()) {
         NightSky(
             if (s.tab == Tab.TASKS) Glow.indigo else Glow.blue,
-            blurred = s.screen != Screen.MAIN,
+            blurred = true,
         )
         if (!s.settingsLoaded) return@Box
         when (s.screen) {

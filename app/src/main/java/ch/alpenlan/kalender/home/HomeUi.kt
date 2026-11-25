@@ -175,7 +175,7 @@ fun HomeApp(vm: HomeViewModel) {
             HomeTab.OVERVIEW -> Glow.blue; HomeTab.ROOM -> Glow.blue; HomeTab.SERVER -> Glow.indigo; HomeTab.APPS -> Glow.teal
         }
         val outage = s.model?.ups?.onBattery == true
-        NightSky(if (outage) Glow.amber else glow, blurred = s.loggedIn && s.tab != HomeTab.OVERVIEW)
+        NightSky(if (outage) Glow.amber else glow, blurred = true)
         if (!s.loggedIn) LoginScreen(s, vm) else Main(s, vm)
         s.toast?.let { t ->
             LaunchedEffect(s.toastStamp) { delay(2800); vm.dismissToast() }

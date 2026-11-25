@@ -55,6 +55,8 @@ import ch.alpenlan.kalender.ui.Mono
 import ch.alpenlan.kalender.ui.Pill
 import ch.alpenlan.kalender.ui.SwitchRow
 import ch.alpenlan.kalender.ui.Syne
+import ch.alpenlan.kalender.ui.Glow
+import ch.alpenlan.kalender.ui.NightSky
 
 /**
  * Alpenlan Light: das Handy als Lichtquelle im Publikum, gesteuert vom Lichtpult.
@@ -79,6 +81,8 @@ class LightActivity : ComponentActivity() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         setContent {
             AlpenlanTheme {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                NightSky(Glow.indigo, blurred = true)
                 LightSetup(
                     initialUrl = prefs.getString("url", DEFAULT_URL) ?: DEFAULT_URL,
                     initialZone = prefs.getInt("zone", 0),
@@ -90,6 +94,7 @@ class LightActivity : ComponentActivity() {
                         start(test, url, zone, useTorch)
                     },
                 )
+                }
             }
         }
     }
@@ -139,7 +144,6 @@ private fun LightSetup(
     Column(
         Modifier
             .fillMaxSize()
-            .background(A.ground)
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .navigationBarsPadding()
